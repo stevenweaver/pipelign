@@ -63,7 +63,7 @@ def separateFullFragment():
   '''
   global fragEmpty
   
-  print('\nInput sequence file is being read.\n')
+  print('\nInput sequence file is being read')
   seqs = list(SeqIO.parse('input.fas','fasta'))
   
   mLen = -1
@@ -102,14 +102,16 @@ def runCDHIT():
   if len(seqs) < 2:
     return
   
-  print('\n\nCD-HIT (CD-HIT-EST) groups the input protein (DNA) sequences into clusters based on sequence similarity')
+  print('\nrunning CD-HIT/CD-HIT-EST to group input sequences into clusters based on sequence similarity')
+  
+  lh = open('cdhit.log','w') # create log file for cdhit
   
   if alpha == 'dna':
     cl = 'cd-hit-est -c 0.8 -n 5 -i full.fas -o grp -d 0'
     #print(cl)
     
     try:
-      subprocess.check_call(cl,shell=True)
+      subprocess.check_call(cl, shell=True, stdout=lf, stderr=lh)
     except subprocess.CalledProcessError as e:
       sys.exit(e)
       
@@ -118,10 +120,11 @@ def runCDHIT():
     #print(cl)
     
     try:
-      subprocess.check_call(cl,shell=True)
+      subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
     except subprocess.CalledProcessError as e:
       sys.exit(e)
-    
+  
+  lh.close() # close log file   
 #*************************************************************************
 
 #*************************************************************************
@@ -130,7 +133,7 @@ def makeClusters():
     Separate files are created for each clusters
   '''
   
-  print('\n\nWriting sequences to cluster files')
+  print('\nWriting sequences to cluster files')
   
   fName = 'full.fas'
   
@@ -195,21 +198,26 @@ def alnFullSequenceClusters(nClusters):
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
   
   '''
+  lh = open('clusterAlign.log','w') # open log file for cluster alignment
+  
   for i in range(nClusters):
     cName = 'grp.' + str(i) + '.fas'
     aName = 'grp.' + str(i) + '.aln'
     seqs = list(SeqIO.parse(cName,'fasta'))
+    
+    
+    
     if len(seqs) > 1:
       cl = 'mafft --globalpair --maxiterate 1000 --preservecase %s > %s' % (cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
-        subprocess.check_call(cl,shell=True)
+        subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
     else:
       shutil.copyfile(cName,aName)
 
-  
+  lh.close() # close log file
 #***********************************************************************  
 
 #***********************************************************************  
@@ -223,7 +231,9 @@ def makeHMMdb(nClusters):
     return # if there is no fragment sequences
 
   
-  print('\n\nCreating profile HMMs for each of the full length alignments')
+  print('\nCreating profile HMMs for each of the full length alignments')
+  
+  lh = open('hmmer.log','a') # create log file for hmmer
   
   for i in range(nClusters):
     aName = 'grp.' + str(i) + '.aln'
@@ -245,14 +255,15 @@ def makeHMMdb(nClusters):
         aName = 'temp.aln'
     
     #**************
+    
     cl = 'hmmbuild %s %s' % (hName, aName)
     try:
-      subprocess.check_call(cl,shell=True)
+      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
     except subprocess.CalledProcessError as e:
       sys.exit(e)
     print('\n%s created' % hName)
   
-  print('\n\nCreating the HMM database from the profile HMMs')
+  print('\nCreating the HMM database from the profile HMMs')
   
   dName = 'grp.hmm'
   
@@ -267,13 +278,13 @@ def makeHMMdb(nClusters):
   cl = 'hmmpress %s' % dName
   
   try:
-    subprocess.check_call(cl,shell=True)
+    subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
     sys.exit(e)
 
-  print('\n\nHMM database %s is created' % dName)
+  print('\nHMM database %s is created' % dName)
     
-       
+  lh.close() # close log file     
 #***********************************************************************
 
 #***********************************************************************  
@@ -281,27 +292,29 @@ def searchHMMdb():
   '''
     HMM database is searched with the fragments to assign them a cliuster for alignment
   '''  
+  lh = open('hmmer.log','a')
+  
   if not fragEmpty:
     print('\nFragments are to be searched')
     
     if alpha == 'dna':
       cl = 'nhmmscan --tblout hmm.out --noali grp.hmm frag.fas'
       try:
-        subprocess.check_call(cl,shell=True)
+        subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
       
     elif alpha == 'protein':
       cl = 'hmmscan --tblout hmm.out --noali grp.hmm frag.fas'
       try:
-        subprocess.check_call(cl,shell=True)
+        subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
   
   else:
-    print('\n\nNo fragment sequence present')
+    print('\nNo fragment sequence present')
     
-
+  lh.close()
 #**********************************************************************
 
 #**********************************************************************    
@@ -390,7 +403,10 @@ def addFragmentsToClusters(nClusters):
     Fragments are added to their corresponding cluster alignments
     MAFFT's "--addfragments" is used for adding fragments
   '''    
-  print('\nAdding fragments to their corresponding cluster alignments\n')
+  if not fragEmpty:
+    print('\nAdding fragments to their corresponding cluster alignments')
+  
+  lh = open('fragAlign.log','w')
   
   for i in range(nClusters):
     fName = 'frag.' + str(i) + '.fas'
@@ -399,14 +415,16 @@ def addFragmentsToClusters(nClusters):
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
         #print('\n%s\t%s' % (aName,fName)) 
-        cl = 'mafft --addfragments ----preservecase %s %s > %s' % (fName, aName, oName)
+        cl = 'mafft --preservecase --addfragments %s %s > %s' % (fName, aName, oName)
         
         try:
-          subprocess.check_call(cl,shell=True)
+          subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
         except subprocess.CalledProcessError as e:
           sys.exit(e)
       else:
         shutil.copy(aName,oName)
+
+  lh.close()
 #************************************************************************
 
 def mergeClusters(nClusters):
@@ -442,8 +460,9 @@ def mergeClusters(nClusters):
   catText += '> merge'
   #print(catText)
   
+  lh = open('merge.log','w')
   try:
-    subprocess.check_call(catText,shell=True)
+    subprocess.check_call(catText,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
     sys.exit(e)
 
@@ -451,10 +470,11 @@ def mergeClusters(nClusters):
   fh.write(mTab)
   fh.close()
   
+  
   cl = 'mafft --preservecase --localpair --maxiterate 100 --merge subMSAtable merge > out.aln'
   
   try:
-    subprocess.check_call(cl,shell=True)
+    subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
     sys.exit(e)
   
@@ -462,6 +482,7 @@ def mergeClusters(nClusters):
     shutil.copy('out.aln',outFile)
     #print(outFile)
   
+  lh.close()
 #************************************************************************
     
 #************************************************************************  
@@ -522,7 +543,7 @@ if __name__=="__main__":
   # next is add fragments to cluster alignments
   addFragmentsToClusters(numClusters)
   mergeClusters(numClusters)
-  print('\nThe alignment is written in %s\n' % args.output)
+  print('\nThe alignment is written in %s' % outFile)
   
   os.chdir(cDir)
   
@@ -530,5 +551,6 @@ if __name__=="__main__":
   if args.zip:
     zName = 'Pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
     shutil.make_archive(zName,'zip',tempDir.name)
+    print('\nArchive for all temporary files created in %s.zip\n' % zName)
 #************************************************************  
 
