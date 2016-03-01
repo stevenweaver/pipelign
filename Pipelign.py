@@ -231,7 +231,7 @@ def alnFullSequenceClusters(nClusters):
     aName = 'grp.' + str(i) + '.aln'
     seqs = list(SeqIO.parse(cName,'fasta'))
     if len(seqs) > 1:
-      cl = 'mafft --globalpair --maxiterate 1000 %s > %s' % (cName, aName)
+      cl = 'mafft --globalpair --maxiterate 1000 --preservecase %s > %s' % (cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
         subprocess.check_call(cl,shell=True)
@@ -430,7 +430,7 @@ def addFragmentsToClusters(nClusters):
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
         #print('\n%s\t%s' % (aName,fName)) 
-        cl = 'mafft --addfragments %s %s > %s' % (fName, aName, oName)
+        cl = 'mafft --addfragments ----preservecase %s %s > %s' % (fName, aName, oName)
         
         try:
           subprocess.check_call(cl,shell=True)
@@ -482,7 +482,7 @@ def mergeClusters(nClusters):
   fh.write(mTab)
   fh.close()
   
-  cl = 'mafft --localpair --maxiterate 100 --merge subMSAtable merge > out.aln'
+  cl = 'mafft --preservecase --localpair --maxiterate 100 --merge subMSAtable merge > out.aln'
   
   try:
     subprocess.check_call(cl,shell=True)
