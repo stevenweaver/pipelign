@@ -115,7 +115,7 @@ def runCDHIT():
     #print(cl)
     
     try:
-      subprocess.check_call(cl, shell=True, stdout=lf, stderr=lh)
+      subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
     except subprocess.CalledProcessError as e:
       sys.exit(e)
       
@@ -555,7 +555,7 @@ if __name__=="__main__":
   
   # create zipped file for temporary directory if -z 1 is used
   if args.zip:
-    zName = 'Pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+    zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
     shutil.make_archive(zName,'zip',tempDir.name)
     print('\nArchive for all temporary files created in %s.zip\n' % zName)
 #************************************************************  
