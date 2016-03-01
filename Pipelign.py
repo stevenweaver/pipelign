@@ -12,6 +12,8 @@
 
 import sys, os, shutil, subprocess, argparse
 from Bio import SeqIO
+import tempfile
+import time
 
 
 inFile = '' # name of the input sequence file
@@ -22,6 +24,7 @@ fragEmpty = 1 # flag to check whether there is any fragmemts in the input
 alpha = '' # sequence is DNA/Protein
 addNClusters = 0  # flag for adding fragments without clusters
 frag = 1 # ask users whether to keep fragments without clusters
+zzip = 0 # writes zipped temporary files if zzip = 1
 
 #********************************************************************
 
@@ -35,51 +38,17 @@ def init(args):
       - minimum length for full length sequences
       - genetic code for transalation
   '''
-  global inFile, outFile, thr, genCode, alpha, frag
+  global inFile, outFile, thr, genCode, alpha, frag, zzip
   
   inFile = args.input
-  outFile = '../' + args.output
+  outFile = os.getcwd() + '/' + args.output
   thr = args.thr
   genCode = args.code
   alpha = args.alpha
   frag = args.frag
+  zzip = args.zip
+  
   print('\nInput sequence file for alignment is <%s>' % inFile)
-
-#*******************************************************************
-
-#*******************************************************************
-def createTempDir():
-  '''
-    Creates temporary directory <tempAln> to store intermediary files
-  '''
-  
-  try:
-    if os.stat(inFile).st_size > 0:
-      if os.path.exists('tempAln'):
-        print('\n\nA directory named "tempAln" already exists.')
-        print('\nThe program will remove the directory "tempAln" with all its content.')
-        
-        while True:
-          res = input('\nDo you wish to continue (y/n)? ')
-          if res == 'y' or res == 'Y':
-            shutil.rmtree('tempAln')
-            break
-          elif res == 'n' or res == 'N':
-            sys.exit('\nPlease rename the directory "tempAln" and start again\n')
-          else:
-             print('\nIncorrect choice. Please enter "y/Y" or "n/N"')
-             continue
-      os.makedirs('tempAln')
-  
-      shutil.copyfile(inFile,'tempAln/input.fas')
-      
-  except OSError:
-    msg = '\n\nThe sequence file "%s"  cannot be found.' % inFile
-    msg += '\n**Please run Pipelign again with correct input file name**'
-    msg += '\nPipelign is exiting.\n'
-    sys.exit(msg)
-    
-  #os.chdir('tempAln')    
   
 #************************************************************************
   
@@ -491,6 +460,7 @@ def mergeClusters(nClusters):
   
   if os.path.exists('out.aln') and os.stat('out.aln').st_size > 0:
     shutil.copy('out.aln',outFile)
+    #print(outFile)
   
 #************************************************************************
     
@@ -507,6 +477,7 @@ def getArguments():
   parser.add_argument('-c', '--code', nargs='?', const=1, type=int, help="Genetic code for translation",default=1)
   parser.add_argument('-a', '--alpha', help='Input sequences can be DNA/Protein', choices=['dna','protein'], default='dna')
   parser.add_argument('-f', '--frag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', default=1)
+  parser.add_argument('-z', '--zip', nargs = '?', const = 0, type = int, help='Create zipped temporary files', default=0)
   
   args = parser.parse_args()
 
@@ -520,9 +491,25 @@ if __name__=="__main__":
   args = getArguments()
   
   init(args)
-  #print('infile = %s' % inFile) 
-  createTempDir()
-  os.chdir('tempAln')
+  
+  cDir = os.getcwd() # save current working directory
+  
+  # create temporary directory
+  try:
+    tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
+    tFileName = tempDir.name + '/input.fas' 
+    shutil.copyfile(inFile,tFileName) # copy input file to temporary directory 
+  
+  except OSError:
+    msg = '\n\nThe sequence file "%s"  cannot be found.' % inFile
+    msg += '\n**Please run Pipelign again with correct input file name**'
+    msg += '\nPipelign is exiting.\n'
+    sys.exit(msg)
+  
+  tName = tempDir.name
+  
+  #change current working directory to the temp
+  os.chdir(tName)
   separateFullFragment()
   runCDHIT()
   numClusters = makeClusters()
@@ -536,7 +523,12 @@ if __name__=="__main__":
   addFragmentsToClusters(numClusters)
   mergeClusters(numClusters)
   print('\nThe alignment is written in %s\n' % args.output)
-  os.chdir('..')
-  shutil.rmtree('tempAln')
+  
+  os.chdir(cDir)
+  
+  # create zipped file for temporary directory if -z 1 is used
+  if args.zip:
+    zName = 'Pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+    shutil.make_archive(zName,'zip',tempDir.name)
 #************************************************************  
 
