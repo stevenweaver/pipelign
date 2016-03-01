@@ -25,6 +25,8 @@ alpha = '' # sequence is DNA/Protein
 addNClusters = 0  # flag for adding fragments without clusters
 frag = 1 # ask users whether to keep fragments without clusters
 zzip = 0 # writes zipped temporary files if zzip = 1
+per = 0.8
+thread = 1
 
 #********************************************************************
 
@@ -38,7 +40,7 @@ def init(args):
       - minimum length for full length sequences
       - genetic code for transalation
   '''
-  global inFile, outFile, thr, genCode, alpha, frag, zzip
+  global inFile, outFile, thr, genCode, alpha, frag, zzip, per, thread
   
   inFile = args.input
   outFile = os.getcwd() + '/' + args.output
@@ -47,6 +49,8 @@ def init(args):
   alpha = args.alpha
   frag = args.frag
   zzip = args.zip
+  per = args.per
+  thread = args.thread
   
   print('\nInput sequence file for alignment is <%s>' % inFile)
   
@@ -107,7 +111,7 @@ def runCDHIT():
   lh = open('cdhit.log','w') # create log file for cdhit
   
   if alpha == 'dna':
-    cl = 'cd-hit-est -c 0.8 -n 5 -i full.fas -o grp -d 0'
+    cl = 'cd-hit-est -c %f -n 5 -i full.fas -o grp -d 0 -T %d' % (per,thread)
     #print(cl)
     
     try:
@@ -116,7 +120,7 @@ def runCDHIT():
       sys.exit(e)
       
   elif alpha == 'protein':
-    cl = 'cd-hit -c 0.8 -n 5 -i full.fas -o grp -d 0'
+    cl = 'cd-hit -c %f -n 5 -i full.fas -o grp -d 0 -T %d' % (per, thread)
     #print(cl)
     
     try:
@@ -208,7 +212,7 @@ def alnFullSequenceClusters(nClusters):
     
     
     if len(seqs) > 1:
-      cl = 'mafft --globalpair --maxiterate 1000 --preservecase %s > %s' % (cName, aName)
+      cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
         subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
@@ -256,7 +260,7 @@ def makeHMMdb(nClusters):
     
     #**************
     
-    cl = 'hmmbuild %s %s' % (hName, aName)
+    cl = 'hmmbuild --cpu %d %s %s' % (thread, hName, aName)
     try:
       subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
     except subprocess.CalledProcessError as e:
@@ -298,14 +302,14 @@ def searchHMMdb():
     print('\nFragments are to be searched')
     
     if alpha == 'dna':
-      cl = 'nhmmscan --tblout hmm.out --noali grp.hmm frag.fas'
+      cl = 'nhmmscan --cpu %d --tblout hmm.out --noali grp.hmm frag.fas' % thread
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
       
     elif alpha == 'protein':
-      cl = 'hmmscan --tblout hmm.out --noali grp.hmm frag.fas'
+      cl = 'hmmscan --cpu %d --tblout hmm.out --noali grp.hmm frag.fas' % thread
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
@@ -415,7 +419,7 @@ def addFragmentsToClusters(nClusters):
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
         #print('\n%s\t%s' % (aName,fName)) 
-        cl = 'mafft --preservecase --addfragments %s %s > %s' % (fName, aName, oName)
+        cl = 'mafft --preservecase --thread %d --addfragments %s %s > %s' % (thread, fName, aName, oName)
         
         try:
           subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
@@ -471,7 +475,7 @@ def mergeClusters(nClusters):
   fh.close()
   
   
-  cl = 'mafft --preservecase --localpair --maxiterate 100 --merge subMSAtable merge > out.aln'
+  cl = 'mafft --preservecase --thread %d --localpair --maxiterate 100 --merge subMSAtable merge > out.aln' % thread
   
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
@@ -494,11 +498,13 @@ def getArguments():
   parser = argparse.ArgumentParser(description="Pipelign: creates multiple sequence alignment from FASTA formatted sequence file", formatter_class=argparse.RawDescriptionHelpFormatter)  
   parser.add_argument('-i', '--input', required=True, help="Input sequence file")
   parser.add_argument('-o', '--output', required=True, help="Output alignment file")
-  parser.add_argument('-t', '--thr', nargs='?', const=0.5, type=float, help="Output alignment file", default=0.5)
+  parser.add_argument('-t', '--thr', nargs='?', const=0.5, type=float, help="Length threshold for full sequences", default=0.5)
   parser.add_argument('-c', '--code', nargs='?', const=1, type=int, help="Genetic code for translation",default=1)
   parser.add_argument('-a', '--alpha', help='Input sequences can be DNA/Protein', choices=['dna','protein'], default='dna')
   parser.add_argument('-f', '--frag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', default=1)
   parser.add_argument('-z', '--zip', nargs = '?', const = 0, type = int, help='Create zipped temporary files', default=0)
+  parser.add_argument('-p', '--per', nargs='?', const=0.8, type=float, help="percent sequence similarity for clustering", default=0.8)
+  parser.add_argument('-q', '--thread', nargs='?', const=1, type=int, help="Number of CPU to use for multithreads", default=1)
   
   args = parser.parse_args()
 
