@@ -55,6 +55,25 @@ def init(args):
   print('\nInput sequence file for alignment is <%s>' % inFile)
   
 #************************************************************************
+
+#************************************************************************
+
+def deAlign():
+  '''
+  Removes gaps (if any) from the input sequence file
+  
+  ''' 
+  
+  seqs = list(SeqIO.parse('in.fas','fasta'))
+  
+  st = ''
+  
+  for seq in seqs:
+    st += '>' + seq.id + '\n' + str(seq.seq).replace('-','') + '\n'
+  
+  fh = open('input.fas','w')
+  fh.write(st)
+  fh.close()
   
 #************************************************************************
 
@@ -524,7 +543,7 @@ if __name__=="__main__":
   # create temporary directory
   try:
     tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
-    tFileName = tempDir.name + '/input.fas' 
+    tFileName = tempDir.name + '/in.fas' 
     shutil.copyfile(inFile,tFileName) # copy input file to temporary directory 
   
   except OSError:
@@ -537,6 +556,7 @@ if __name__=="__main__":
   
   #change current working directory to the temp
   os.chdir(tName)
+  deAlign() # removes any possible gaps from the sequence file
   separateFullFragment()
   runCDHIT()
   numClusters = makeClusters()
