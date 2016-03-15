@@ -64,17 +64,31 @@ def deAlign():
   
   ''' 
   
+  print("\nRemoving the gap characters '-'/'.' (if any) from the sequences")
   seqs = list(SeqIO.parse('in.fas','fasta'))
   
   st = ''
   
   for seq in seqs:
-    st += '>' + seq.id + '\n' + str(seq.seq).replace('-','') + '\n'
+    st += '>' + seq.id + '\n' + str(seq.seq).replace('-','').replace('.','') + '\n'
   
   fh = open('input.fas','w')
   fh.write(st)
   fh.close()
   
+#*************************************************************************
+
+def cZip(cDir,tName):
+  '''
+  creates a zip file of the temporary directory
+  '''  
+  os.chdir(cDir)
+  
+  zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+  shutil.make_archive(zName,'zip',tName)
+  print('\nArchive for all temporary files created in %s.zip\n' % zName)
+  sys.exit()
+
 #************************************************************************
 
 def separateFullFragment():
@@ -86,7 +100,7 @@ def separateFullFragment():
   '''
   global fragEmpty
   
-  print('\nInput sequence file is being read')
+  print('\nCreating separate files for long sequences and fragments')
   seqs = list(SeqIO.parse('input.fas','fasta'))
   
   mLen = -1
@@ -125,7 +139,7 @@ def runCDHIT():
   if len(seqs) < 2:
     return
   
-  print('\nrunning CD-HIT/CD-HIT-EST to group input sequences into clusters based on sequence similarity')
+  print('\nRunning CD-HIT/CD-HIT-EST to group long sequences into clusters based on sequence similarity')
   
   lh = open('cdhit.log','w') # create log file for cdhit
   
@@ -156,7 +170,7 @@ def makeClusters():
     Separate files are created for each clusters
   '''
   
-  print('\nWriting sequences to cluster files')
+  print('\nCreating cluster files for long sequences')
   
   fName = 'full.fas'
   
@@ -212,6 +226,7 @@ def makeClusters():
   fh.write(st)
   fh.close()
   
+  print('\nTotal %d cluster file(s) created' % cls)
   return cls   
 #***********************************************************************
 
@@ -231,6 +246,7 @@ def alnFullSequenceClusters(nClusters):
     
     
     if len(seqs) > 1:
+      print('\nAligning cluster %d of %d sequences' % (i+1,len(seqs)))
       cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
@@ -244,17 +260,17 @@ def alnFullSequenceClusters(nClusters):
 #***********************************************************************  
 
 #***********************************************************************  
-def makeHMMdb(nClusters):
+def makeHMMdb(nClusters,cDir,tName):
   '''
     Create profile HMMs for each of the full length alignments 
     Create HMM_DB from the pHMMs
      
   '''
-  if fragEmpty:
-    return # if there is no fragment sequences
+  #if fragEmpty:
+    #return # if there is no fragment sequences
 
   
-  print('\nCreating profile HMMs for each of the full length alignments')
+  print('\nCreating profile HMMs for each of the cluster alignments')
   
   lh = open('hmmer.log','a') # create log file for hmmer
   
@@ -266,7 +282,11 @@ def makeHMMdb(nClusters):
     # hmmbuild fails when alignment does not have any gaps
     # solution: add a '-' at the end of each sequences ????
     aseqs = list(SeqIO.parse(aName,'fasta'))
-    
+
+    if len(aseqs) == 1:
+      aseqs.append(aseqs[0])
+      aseqs[1].id = 'temp'
+
     if len(aseqs) > 1:
       sumGap = 0
       for seq in aseqs:
@@ -283,7 +303,9 @@ def makeHMMdb(nClusters):
     try:
       subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
     except subprocess.CalledProcessError as e:
-      sys.exit(e)
+      #sys.exit(e)
+      print(e)
+      cZip(cDir,tName)
     print('\n%s created' % hName)
   
   print('\nCreating the HMM database from the profile HMMs')
@@ -303,7 +325,9 @@ def makeHMMdb(nClusters):
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    #sys.exit(e)
+    print(e)
+    cZip(cDir,tName)
 
   print('\nHMM database %s is created' % dName)
     
@@ -318,7 +342,7 @@ def searchHMMdb():
   lh = open('hmmer.log','a')
   
   if not fragEmpty:
-    print('\nFragments are to be searched')
+    print('\nFragments will be searched against the HMM database to assign clusters')
     
     if alpha == 'dna':
       cl = 'nhmmscan --cpu %d --tblout hmm.out --noali grp.hmm frag.fas' % thread
@@ -352,8 +376,8 @@ def parseHMMsearchResult(nClusters):
   
   fFlag = 0
   
-  if fragEmpty:
-    return # if there is no fragment sequences
+  #if fragEmpty:
+    #return # if there is no fragment sequences
         
   fSeqs = list(SeqIO.parse('frag.fas','fasta'))
   
@@ -539,7 +563,7 @@ if __name__=="__main__":
   init(args)
   
   cDir = os.getcwd() # save current working directory
-  
+  #'''
   # create temporary directory
   try:
     tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
@@ -560,16 +584,30 @@ if __name__=="__main__":
   separateFullFragment()
   runCDHIT()
   numClusters = makeClusters()
+ 
   #print('\n\nNumber of clusters %d' % numClusters)
   alnFullSequenceClusters(numClusters)
-  makeHMMdb(numClusters)
-  searchHMMdb()
-  #numClusters = 2
-  parseHMMsearchResult(numClusters)
-  # next is add fragments to cluster alignments
+  
+  '''
+  #*************************
+  tName = 'pipelign.2016-03-12-130438'
+  
+  fragEmpty = 0
+  numClusters = 96
+  os.chdir(tName)
+  #*******************************
+  '''
+  if not fragEmpty:
+    makeHMMdb(numClusters,cDir,tName)
+    searchHMMdb()
+    #numClusters = 2
+    parseHMMsearchResult(numClusters)
+    # next is add fragments to cluster alignments
+  
   addFragmentsToClusters(numClusters)
   mergeClusters(numClusters)
   print('\nThe alignment is written in %s' % outFile)
+  
   
   os.chdir(cDir)
   
@@ -578,5 +616,6 @@ if __name__=="__main__":
     zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
     shutil.make_archive(zName,'zip',tempDir.name)
     print('\nArchive for all temporary files created in %s.zip\n' % zName)
+  
 #************************************************************  
 
