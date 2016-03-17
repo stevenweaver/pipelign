@@ -16,65 +16,41 @@ import tempfile
 import time
 
 
-inFile = '' # name of the input sequence file
-outFile = '' # name of the output alignment file
-thr = 0.0 # length thereshold to separate full sequences and fragments
-genCode = 1 # genetic code to use
-fragEmpty = 1 # flag to check whether there is any fragmemts in the input 
-alpha = '' # sequence is DNA/Protein
-addNClusters = 0  # flag for adding fragments without clusters
-frag = 1 # ask users whether to keep fragments without clusters
-zzip = 0 # writes zipped temporary files if zzip = 1
-per = 0.8
-thread = 1
+class Struct:
+  '''
+   - this class creates a structure of the parameter values needed for different functions.
+   - parameters can be accessed as structName.itemName e.g. mArgs.gCode 
+  '''
+  def __init__(self, **kwargs):
+    for k, v in kwargs.items():
+      setattr(self,k,v)
+      
+class MyStruct(Struct):
+  pass
 
 #********************************************************************
 
-#******************************************************************
-def init(args):
-  '''
-    This function initializes names for:
-      - input file
-      - outfile file
-    and values for:
-      - minimum length for full length sequences
-      - genetic code for transalation
-  '''
-  global inFile, outFile, thr, genCode, alpha, frag, zzip, per, thread
-  
-  inFile = args.input
-  outFile = os.getcwd() + '/' + args.output
-  thr = args.thr
-  genCode = args.code
-  alpha = args.alpha
-  frag = args.frag
-  zzip = args.zip
-  per = args.per
-  thread = args.thread
-  
-  print('\nInput sequence file for alignment is <%s>' % inFile)
-  
 #************************************************************************
 
-#************************************************************************
-
-def deAlign():
+def deAlign(iFile, dFile):
   '''
   Removes gaps (if any) from the input sequence file
   
   ''' 
   
   print("\nRemoving the gap characters '-'/'.' (if any) from the sequences")
-  seqs = list(SeqIO.parse('in.fas','fasta'))
+  seqs = list(SeqIO.parse(iFile,'fasta'))
   
   st = ''
   
   for seq in seqs:
     st += '>' + seq.id + '\n' + str(seq.seq).replace('-','').replace('.','') + '\n'
   
-  fh = open('input.fas','w')
+  fh = open(dFile,'w')
   fh.write(st)
   fh.close()
+  
+  print('\tGapless sequence file written in <%s>' % dFile)
   
 #*************************************************************************
 
@@ -91,17 +67,17 @@ def cZip(cDir,tName):
 
 #************************************************************************
 
-def separateFullFragment():
+def separateFullFragment(iFile, thr, longName, fragName):
   '''
     Reads in the input sequence file.
       - finds length of the longest sequence
       - find minimum length required for full length sequences
       - writes full length sequences and fragments into two separate files 
   '''
-  global fragEmpty
+  #global fragEmpty
   
   print('\nCreating separate files for long sequences and fragments')
-  seqs = list(SeqIO.parse('input.fas','fasta'))
+  seqs = list(SeqIO.parse(iFile,'fasta'))
   
   mLen = -1
   
@@ -120,21 +96,30 @@ def separateFullFragment():
     else:
       full.append(seq)
       
-  if len(frag) > 0:
-    SeqIO.write(frag, 'frag.fas','fasta')
-    fragEmpty = 0
   
-  SeqIO.write(full,'full.fas','fasta') 
+  SeqIO.write(full,longName,'fasta') 
+  print('\tLong sequences are written in <%s>' % longName)
+
+  if len(frag) > 0:
+    SeqIO.write(frag, fragName,'fasta')
+    print('\tFragments are written in <%s>' % fragName)
+    fragEmpty = 0
+    
+  
+  if fragEmpty:
+    return 1
+  else:
+    return 0
 #************************************************************************
 
 #************************************************************************
-def runCDHIT():
+def runCDHIT(longName, alphabet, per, thread):
   '''
     CD-HIT is used to group similar sequences together in clusters for alignment
     
   '''
    
-  seqs = list(SeqIO.parse('full.fas','fasta'))
+  seqs = list(SeqIO.parse(longName,'fasta'))
   
   if len(seqs) < 2:
     return
@@ -143,8 +128,8 @@ def runCDHIT():
   
   lh = open('cdhit.log','w') # create log file for cdhit
   
-  if alpha == 'dna':
-    cl = 'cd-hit-est -c %f -n 5 -i full.fas -o grp -d 0 -T %d' % (per,thread)
+  if alphabet == 'dna':
+    cl = 'cd-hit-est -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
     #print(cl)
     
     try:
@@ -152,8 +137,8 @@ def runCDHIT():
     except subprocess.CalledProcessError as e:
       sys.exit(e)
       
-  elif alpha == 'protein':
-    cl = 'cd-hit -c %f -n 5 -i full.fas -o grp -d 0 -T %d' % (per, thread)
+  elif alphabet == 'protein':
+    cl = 'cd-hit -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
     #print(cl)
     
     try:
@@ -162,22 +147,24 @@ def runCDHIT():
       sys.exit(e)
   
   lh.close() # close log file   
+  
+  print('\tCD-HIT created two files:')
+  print('\t\t  <grp> for cluster representative long sequences')
+  print('\t\t  <grp.clstr> for cluster assignment of long sequences')
 #*************************************************************************
 
 #*************************************************************************
-def makeClusters():
+def makeClusters(longName):
   '''
     Separate files are created for each clusters
   '''
   
   print('\nCreating cluster files for long sequences')
   
-  fName = 'full.fas'
-  
-  seqs = list(SeqIO.parse(fName,'fasta')) # load all the full sequences
+  seqs = list(SeqIO.parse(longName,'fasta')) # load all the full sequences
   
   if len(seqs) < 2:
-    shutil.copy(fName,'grp.0.fas')
+    shutil.copy(longName,'grp.0.fas')
     return 1
   
   cName = 'grp.clstr'
@@ -226,18 +213,20 @@ def makeClusters():
   fh.write(st)
   fh.close()
   
-  print('\nTotal %d cluster file(s) created' % cls)
+  print('\tTotal %d cluster file(s) created; example name <cls.0.fas>' % cls)
+  
   return cls   
 #***********************************************************************
 
 #***********************************************************************
-def alnFullSequenceClusters(nClusters):
+def alnFullSequenceClusters(nClusters, thread):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
   
   '''
   lh = open('clusterAlign.log','w') # open log file for cluster alignment
   
+  print('\nAligning clusters')
   for i in range(nClusters):
     cName = 'grp.' + str(i) + '.fas'
     aName = 'grp.' + str(i) + '.aln'
@@ -246,7 +235,7 @@ def alnFullSequenceClusters(nClusters):
     
     
     if len(seqs) > 1:
-      print('\nAligning cluster %d of %d sequences' % (i+1,len(seqs)))
+      print('\tAligning cluster %d of %d sequences' % (i+1,len(seqs)))
       cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
@@ -260,7 +249,7 @@ def alnFullSequenceClusters(nClusters):
 #***********************************************************************  
 
 #***********************************************************************  
-def makeHMMdb(nClusters,cDir,tName):
+def makeHMMdb(nClusters,cDir,tName,thread,lFile):
   '''
     Create profile HMMs for each of the full length alignments 
     Create HMM_DB from the pHMMs
@@ -270,9 +259,9 @@ def makeHMMdb(nClusters,cDir,tName):
     #return # if there is no fragment sequences
 
   
-  print('\nCreating profile HMMs for each of the cluster alignments')
+  print('\nCreating profile HMMs for %d cluster alignments' % nClusters)
   
-  lh = open('hmmer.log','a') # create log file for hmmer
+  lh = open(lFile,'a') # create log file for hmmer
   
   for i in range(nClusters):
     aName = 'grp.' + str(i) + '.aln'
@@ -306,7 +295,7 @@ def makeHMMdb(nClusters,cDir,tName):
       #sys.exit(e)
       print(e)
       cZip(cDir,tName)
-    print('\n%s created' % hName)
+    print('\t<%s> created' % hName)
   
   print('\nCreating the HMM database from the profile HMMs')
   
@@ -329,49 +318,50 @@ def makeHMMdb(nClusters,cDir,tName):
     print(e)
     cZip(cDir,tName)
 
-  print('\nHMM database %s is created' % dName)
+  print('\tHMM database <%s> is created' % dName)
     
   lh.close() # close log file     
 #***********************************************************************
 
 #***********************************************************************  
-def searchHMMdb():
+def searchHMMdb(lFile, thread, fragEmpty,alpha,res):
   '''
     HMM database is searched with the fragments to assign them a cliuster for alignment
   '''  
-  lh = open('hmmer.log','a')
+  lh = open(lFile,'a')
   
   if not fragEmpty:
     print('\nFragments will be searched against the HMM database to assign clusters')
+    print('\tResults of the database search are being written on <%s>' % res)
     
     if alpha == 'dna':
-      cl = 'nhmmscan --cpu %d --tblout hmm.out --noali grp.hmm frag.fas' % thread
+      cl = 'nhmmscan --cpu %d --tblout %s --noali grp.hmm frag.fas' % (thread,res)
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
       
     elif alpha == 'protein':
-      cl = 'hmmscan --cpu %d --tblout hmm.out --noali grp.hmm frag.fas' % thread
+      cl = 'hmmscan --cpu %d --tblout %s --noali grp.hmm frag.fas' % (thread,res)
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
   
-  else:
-    print('\nNo fragment sequence present')
+  #else:
+    #print('\nNo fragment sequence present')
     
   lh.close()
 #**********************************************************************
 
 #**********************************************************************    
-def parseHMMsearchResult(nClusters):
+def parseHMMsearchResult(nClusters,fragFile,res,keepFrag):
   '''
     Reads in the result file from hmm.out file to determine cluster for fragments
   '''
   
-  global addNClusters
-  
+  #global addNClusters
+  print('\nWriting cluster files for fragments')
   fSeqIDs = [] # IDs of the fragments
   
   fFlag = 0
@@ -379,14 +369,14 @@ def parseHMMsearchResult(nClusters):
   #if fragEmpty:
     #return # if there is no fragment sequences
         
-  fSeqs = list(SeqIO.parse('frag.fas','fasta'))
+  fSeqs = list(SeqIO.parse(fragFile,'fasta'))
   
   for seq in fSeqs:
     fSeqIDs.append(seq.id)
   
   fIndex = [-1 for x in range(len(fSeqIDs))] # to hold cluster number assigned for each fragments
   
-  lines = [line.strip('\n') for line in open('hmm.out','r')]
+  lines = [line.strip('\n') for line in open(res,'r')]
   
   for l in lines:
     if 'grp' in l and l[0] != '#':
@@ -409,6 +399,7 @@ def parseHMMsearchResult(nClusters):
     
     if len(fcseqs) > 0:
       SeqIO.write(fcseqs, fcName, 'fasta')
+      print('\t<%s>' % fcName)
     
   #print(fSeqIDs)
   #print(fIndex) 
@@ -424,34 +415,34 @@ def parseHMMsearchResult(nClusters):
   
   if len(noCluster) > 0:
     SeqIO.write(noCluster,'frag.noClusters.fas','fasta')  
-    print('\n\nThe following Sequences did not match with any cluster')
+    print('\nThe following fragments did not match with any cluster')
     print('\n%s\n' % ncIds)
-    print('\nThese sequences will not be added to the final alignment')
+
+    if keepFrag:
+      print('But will be added to the final alignment')
+      print('\nUse the flag "-f 0" to exclude these from the final alignment')
     
-    #addNClusters = 1
-    
-    if frag == 1: # asks the user whether to add the fragments that did not have clusters
+    else: # user did not explicitely asked to add orphan fragments  
       while True:
-        res = input('\nDo you want to add these sequences to the alignment (y/n)? ')
-        if res == 'y' or res == 'Y':
-          addNClusters = 1
-          break
-        elif res == 'n' or res == 'N':
-          break
+        choice = input('Do you want to add these sequences to the alignment (y/n)? ')
+        if choice.strip() == 'y' or choice.strip() == 'Y':
+          return 1
+        elif choice.strip() == 'n' or choice.strip() == 'N':
+          return 0
         else:
-          print('\nIncorrect choice. Please enter "y/Y" or "n/N"')
+          print('\nIncorrect choice. Please enter "y(Y)" or "n(N)"')
           continue
     
 #************************************************************************
 
 #************************************************************************
-def addFragmentsToClusters(nClusters):
+def addFragmentsToClusters(nClusters, thread):
   '''
     Fragments are added to their corresponding cluster alignments
     MAFFT's "--addfragments" is used for adding fragments
   '''    
-  if not fragEmpty:
-    print('\nAdding fragments to their corresponding cluster alignments')
+  #if not fragEmpty:
+    #print('\nAdding fragments to their corresponding cluster alignments')
   
   lh = open('fragAlign.log','w')
   
@@ -461,7 +452,7 @@ def addFragmentsToClusters(nClusters):
     oName = 'cls.' + str(i) + '.aln'
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
-        #print('\n%s\t%s' % (aName,fName)) 
+        print('\nAdding fragments from <%s> to <%s>' % (fName,aName)) 
         cl = 'mafft --preservecase --thread %d --addfragments %s %s > %s' % (thread, fName, aName, oName)
         
         try:
@@ -474,13 +465,13 @@ def addFragmentsToClusters(nClusters):
   lh.close()
 #************************************************************************
 
-def mergeClusters(nClusters):
+def mergeClusters(nClusters,outFile,addNClusters,thread):
   '''
     - Merge clusters into one large alignment
     - adds the fragments that were not assigned any cluster if chosen by the user 
   '''  
   
-  print('\nMerging the clusters into a single alignment')
+  print('\nMerging all cluster alignments together')
   
   if nClusters < 2 and addNClusters == 0: 
     shutil.copy('cls.0.aln',outFile)
@@ -502,7 +493,7 @@ def mergeClusters(nClusters):
   #print(mTab)
   
   if addNClusters == 1 and os.path.exists('frag.noClusters.fas'):
-    catText += 'frag.noClusters.fas '  
+    catText += 'frag.noClusters.fas ' 
   
   catText += '> merge'
   #print(catText)
@@ -543,10 +534,10 @@ def getArguments():
   parser.add_argument('-o', '--output', required=True, help="Output alignment file")
   parser.add_argument('-t', '--thr', nargs='?', const=0.5, type=float, help="Length threshold for full sequences", default=0.5)
   parser.add_argument('-c', '--code', nargs='?', const=1, type=int, help="Genetic code for translation",default=1)
-  parser.add_argument('-a', '--alpha', help='Input sequences can be DNA/Protein', choices=['dna','protein'], default='dna')
-  parser.add_argument('-f', '--frag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', default=1)
-  parser.add_argument('-z', '--zip', nargs = '?', const = 0, type = int, help='Create zipped temporary files', default=0)
-  parser.add_argument('-p', '--per', nargs='?', const=0.8, type=float, help="percent sequence similarity for clustering", default=0.8)
+  parser.add_argument('-a', '--alphabet', help='Input sequences can be DNA/Protein', choices=['dna','protein'], default='dna')
+  parser.add_argument('-f', '--keepFrag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', default=1)
+  parser.add_argument('-z', '--mZip', nargs = '?', const = 0, type = int, help='Create zipped temporary files', default=0)
+  parser.add_argument('-p', '--simPer', nargs='?', const=0.8, type=float, help="percent sequence similarity for clustering", default=0.8)
   parser.add_argument('-q', '--thread', nargs='?', const=1, type=int, help="Number of CPU to use for multithreads", default=1)
   
   args = parser.parse_args()
@@ -560,62 +551,77 @@ def getArguments():
 if __name__=="__main__":
   args = getArguments()
   
-  init(args)
+  #init(args)
+  oFile = os.getcwd() + '/' + args.output
+  mArgs = MyStruct(
+      inFile = args.input,
+      outFile = oFile,
+      lenThr = args.thr,
+      gCode = args.code,
+      alphabet = args.alphabet,
+      keepFrag = args.keepFrag,
+      makeZip = args.mZip,
+      simPer = args.simPer,
+      thread = args.thread,
+      fragEmpty = 1,
+      longName = 'long.fas',
+      fragName = 'frag.fas')
+  
   
   cDir = os.getcwd() # save current working directory
+  tName1 = 'in.fas'
+  tName2 = 'input.fas'
+  
   #'''
   # create temporary directory
   try:
     tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
-    tFileName = tempDir.name + '/in.fas' 
-    shutil.copyfile(inFile,tFileName) # copy input file to temporary directory 
+    tFileName = tempDir.name + '/' + tName1 
+    shutil.copyfile(mArgs.inFile,tFileName) # copy input file to temporary directory 
   
   except OSError:
-    msg = '\n\nThe sequence file "%s"  cannot be found.' % inFile
+    msg = '\n\nThe sequence file "%s"  cannot be found.' % mArgs.inFile
     msg += '\n**Please run Pipelign again with correct input file name**'
     msg += '\nPipelign is exiting.\n'
     sys.exit(msg)
   
+  print('\nPipelign will align sequences in: <%s>' % mArgs.inFile)
   tName = tempDir.name
   
   #change current working directory to the temp
   os.chdir(tName)
-  deAlign() # removes any possible gaps from the sequence file
-  separateFullFragment()
-  runCDHIT()
-  numClusters = makeClusters()
- 
+  deAlign(tName1, tName2) # removes any possible gaps from the sequence file
+  mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
+  
+  runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread)
+  
+  numClusters = makeClusters(mArgs.longName)
+  
   #print('\n\nNumber of clusters %d' % numClusters)
-  alnFullSequenceClusters(numClusters)
+  alnFullSequenceClusters(numClusters, mArgs.thread)
   
-  '''
-  #*************************
-  tName = 'pipelign.2016-03-12-130438'
-  
-  fragEmpty = 0
-  numClusters = 96
-  os.chdir(tName)
-  #*******************************
-  '''
-  if not fragEmpty:
-    makeHMMdb(numClusters,cDir,tName)
-    searchHMMdb()
+  if not mArgs.fragEmpty:
+    lFile = 'hmmer.log'
+    oFile = 'hmm.out'
+    makeHMMdb(numClusters,cDir,tName,mArgs.thread,lFile)
+    searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile)
+    
     #numClusters = 2
-    parseHMMsearchResult(numClusters)
-    # next is add fragments to cluster alignments
+    addNC = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepFrag)
+    # next is add fragments to cluster alignments  
+    addFragmentsToClusters(numClusters,mArgs.thread)
   
-  addFragmentsToClusters(numClusters)
-  mergeClusters(numClusters)
-  print('\nThe alignment is written in %s' % outFile)
+  mergeClusters(numClusters,mArgs.outFile,addNC,mArgs.thread)
+  print('\nThe alignment is written in %s' % mArgs.outFile)
   
   
   os.chdir(cDir)
   
   # create zipped file for temporary directory if -z 1 is used
-  if args.zip:
+  if args.mZip:
     zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
     shutil.make_archive(zName,'zip',tempDir.name)
     print('\nArchive for all temporary files created in %s.zip\n' % zName)
-  
+
 #************************************************************  
 
