@@ -219,12 +219,130 @@ def makeClusters(longName):
 #***********************************************************************
 
 #***********************************************************************
+
+def addClusterNumberToReps(repName,lstFile,outFile):
+  '''
+    - Reads in the cluster representative FASTA file and the clusterList.txt file
+    - Adds cluster number to the sequence header e.g. >seq1_0  
+    - Temporary file <clsReps.fas> is written
+  '''
+  
+  print('\nWriting cluster representatives with cluster number in the header')
+  
+  cList = [line.strip() for line in open(lstFile,'r')]
+  
+  cID = [] # sequence ids 
+  cNum = [] # cluster numbers
+  
+  for line in cList:
+    words = line.split()
+    cID.append(words[0])
+    cNum.append(words[1])
+    
+  seqs = list(SeqIO.parse(repName,'fasta'))
+  
+  for seq in seqs:
+    if seq.id in cID:
+      ind = cID.index(seq.id)
+      
+      seq.id = seq.id + '_' + cNum[ind]
+      seq.name = seq.id
+      seq.description = seq.id
+    else:
+      sys.exit('\nSequence %s does not have a cluster. Pipelign is exiting' % seq.id)
+  
+  SeqIO.write(seqs,outFile,'fasta')    
+
+#***********************************************************************
+
+#***********************************************************************
+
+def ginsi(seqFile,alnFile,thread,log):
+  '''
+    - aligns sequences using MAFFT's G-INS-i method
+  '''
+  
+  lh = open(log,'a')
+  
+  cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, seqFile, alnFile)
+      #cl = 'clustalo -i %s -o %s' % (cName, aName)
+  try:
+    subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
+  except subprocess.CalledProcessError as e:
+    sys.exit(e)
+
+  lh.close()
+#***********************************************************************
+
+#***********************************************************************
+
+def addFragments(fName, aName, oName, thread, log):
+  '''
+    - add fragments to the alignment using MAFFT's --add
+  '''
+
+  lh = open(log,'a')
+  
+  cl = 'mafft --preservecase --thread %d --addfragments %s %s > %s' % (thread, fName, aName, oName)
+        
+  try:
+    subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+  except subprocess.CalledProcessError as e:
+    sys.exit(e)
+  
+  lh.close()
+#***********************************************************************
+
+#***********************************************************************
+
+def makeClusterRepsAlignment(repFile,outFile,thread):
+  '''
+    - Creates a multiple sequence alignment from cluster reps with cluster numbers
+    - uses G-INS-i
+    - writes the alignment in <outFile> 
+  '''
+
+  print('\nAligning cluster representative sequences')
+  
+  ginsi(repFile,outFile,thread,'clsRepAln.log')
+  
+  print('\tAlignment written in %s' % outFile)
+#***********************************************************************
+
+#***********************************************************************
+
+def makeIQTree(alnFile,thread):
+  '''
+    - Constructs phylogenetic tree using IQ-TREE
+  '''
+  
+  lh = open('iqtree.log','a')
+  
+  print('\nCreating IQ-TREE from %s' % alnFile)
+  
+  cl = 'iqtree-omp -s %s -m TEST -nt %s' % (alnFile,thread)
+  
+  try:
+    subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+  except subprocess.CalledProcessError as e:
+    sys.exit(e)
+  
+  lh.close()
+  
+  print('\tTree file is written in %s.treefile' % alnFile)
+  print('\tLog file is written in %s.log' % alnFile)
+  
+#***********************************************************************
+
+#***********************************************************************
 def alnFullSequenceClusters(nClusters, thread):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
   
   '''
-  lh = open('clusterAlign.log','w') # open log file for cluster alignment
+  log = 'clusterAlign.log'
+  lh = open(log,'w') # open log file for cluster alignment
+  lh.close()
   
   print('\nAligning clusters')
   for i in range(nClusters):
@@ -236,16 +354,19 @@ def alnFullSequenceClusters(nClusters, thread):
     
     if len(seqs) > 1:
       print('\tAligning cluster %d of %d sequences' % (i+1,len(seqs)))
+      ginsi(cName,aName,thread,log)
+      '''
       cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
       try:
         subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
+      '''  
     else:
       shutil.copyfile(cName,aName)
 
-  lh.close() # close log file
+  #lh.close() # close log file
 #***********************************************************************  
 
 #***********************************************************************  
@@ -441,10 +562,10 @@ def addFragmentsToClusters(nClusters, thread):
     Fragments are added to their corresponding cluster alignments
     MAFFT's "--addfragments" is used for adding fragments
   '''    
-  #if not fragEmpty:
-    #print('\nAdding fragments to their corresponding cluster alignments')
-  
-  lh = open('fragAlign.log','w')
+
+  log = 'fragAlign.log'
+  lh = open(log,'w')
+  lh.close()
   
   for i in range(nClusters):
     fName = 'frag.' + str(i) + '.fas'
@@ -453,12 +574,15 @@ def addFragmentsToClusters(nClusters, thread):
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
         print('\nAdding fragments from <%s> to <%s>' % (fName,aName)) 
+        addFragments(fName, aName, oName, thread, log)
+        '''
         cl = 'mafft --preservecase --thread %d --addfragments %s %s > %s' % (thread, fName, aName, oName)
         
         try:
           subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
         except subprocess.CalledProcessError as e:
           sys.exit(e)
+        '''
       else:
         shutil.copy(aName,oName)
 
@@ -594,9 +718,16 @@ if __name__=="__main__":
   mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
   
   runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread)
-  
+    
   numClusters = makeClusters(mArgs.longName)
   
+  addClusterNumberToReps('grp','clusterList.txt','clsReps.fas')
+  
+  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread)
+  
+  makeIQTree('clsReps.aln',mArgs.thread)
+  
+
   #print('\n\nNumber of clusters %d' % numClusters)
   alnFullSequenceClusters(numClusters, mArgs.thread)
   
@@ -622,6 +753,6 @@ if __name__=="__main__":
     zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
     shutil.make_archive(zName,'zip',tempDir.name)
     print('\nArchive for all temporary files created in %s.zip\n' % zName)
-
+  
 #************************************************************  
 
