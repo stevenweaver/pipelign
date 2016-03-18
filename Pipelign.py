@@ -128,7 +128,7 @@ def runCDHIT(longName, alphabet, per, thread):
   
   lh = open('cdhit.log','w') # create log file for cdhit
   
-  if alphabet == 'dna':
+  if alphabet == 'nt':
     cl = 'cd-hit-est -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
     #print(cl)
     
@@ -137,7 +137,7 @@ def runCDHIT(longName, alphabet, per, thread):
     except subprocess.CalledProcessError as e:
       sys.exit(e)
       
-  elif alphabet == 'protein':
+  elif alphabet == 'aa':
     cl = 'cd-hit -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
     #print(cl)
     
@@ -257,14 +257,14 @@ def addClusterNumberToReps(repName,lstFile,outFile):
 
 #***********************************************************************
 
-def ginsi(seqFile,alnFile,thread,log):
+def ginsi(seqFile,alnFile,thread,mIterLong,log):
   '''
     - aligns sequences using MAFFT's G-INS-i method
   '''
   
   lh = open(log,'a')
   
-  cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, seqFile, alnFile)
+  cl = 'mafft --globalpair --thread %d --maxiterate %d --preservecase %s > %s' % (thread, mIterLong,seqFile, alnFile)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
   try:
     subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
@@ -295,7 +295,7 @@ def addFragments(fName, aName, oName, thread, log):
 
 #***********************************************************************
 
-def makeClusterRepsAlignment(repFile,outFile,thread):
+def makeClusterRepsAlignment(repFile,outFile,thread,mIterL):
   '''
     - Creates a multiple sequence alignment from cluster reps with cluster numbers
     - uses G-INS-i
@@ -304,7 +304,7 @@ def makeClusterRepsAlignment(repFile,outFile,thread):
 
   print('\nAligning cluster representative sequences')
   
-  ginsi(repFile,outFile,thread,'clsRepAln.log')
+  ginsi(repFile,outFile,thread,mIterL,'clsRepAln.log')
   
   print('\tAlignment written in %s' % outFile)
 #***********************************************************************
@@ -335,7 +335,7 @@ def makeIQTree(alnFile,thread):
 #***********************************************************************
 
 #***********************************************************************
-def alnFullSequenceClusters(nClusters, thread):
+def alnFullSequenceClusters(nClusters, thread,mIterL):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
   
@@ -354,7 +354,7 @@ def alnFullSequenceClusters(nClusters, thread):
     
     if len(seqs) > 1:
       print('\tAligning cluster %d of %d sequences' % (i+1,len(seqs)))
-      ginsi(cName,aName,thread,log)
+      ginsi(cName,aName,thread,mIterL,log)
       '''
       cl = 'mafft --globalpair --thread %d --maxiterate 1000 --preservecase %s > %s' % (thread, cName, aName)
       #cl = 'clustalo -i %s -o %s' % (cName, aName)
@@ -455,14 +455,14 @@ def searchHMMdb(lFile, thread, fragEmpty,alpha,res):
     print('\nFragments will be searched against the HMM database to assign clusters')
     print('\tResults of the database search are being written on <%s>' % res)
     
-    if alpha == 'dna':
+    if alpha == 'nt':
       cl = 'nhmmscan --cpu %d --tblout %s --noali grp.hmm frag.fas' % (thread,res)
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
         sys.exit(e)
       
-    elif alpha == 'protein':
+    elif alpha == 'aa':
       cl = 'hmmscan --cpu %d --tblout %s --noali grp.hmm frag.fas' % (thread,res)
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
@@ -589,7 +589,7 @@ def addFragmentsToClusters(nClusters, thread):
   lh.close()
 #************************************************************************
 
-def mergeClusters(nClusters,outFile,addNClusters,thread):
+def mergeClusters(nClusters,outFile,addNClusters,thread,mIterM):
   '''
     - Merge clusters into one large alignment
     - adds the fragments that were not assigned any cluster if chosen by the user 
@@ -633,7 +633,7 @@ def mergeClusters(nClusters,outFile,addNClusters,thread):
   fh.close()
   
   
-  cl = 'mafft --preservecase --thread %d --localpair --maxiterate 100 --merge subMSAtable merge > out.aln' % thread
+  cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM)
   
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
@@ -658,11 +658,14 @@ def getArguments():
   parser.add_argument('-o', '--output', required=True, help="Output alignment file")
   parser.add_argument('-t', '--thr', nargs='?', const=0.5, type=float, help="Length threshold for full sequences", default=0.5)
   parser.add_argument('-c', '--code', nargs='?', const=1, type=int, help="Genetic code for translation",default=1)
-  parser.add_argument('-a', '--alphabet', help='Input sequences can be DNA/Protein', choices=['dna','protein'], default='dna')
-  parser.add_argument('-f', '--keepFrag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', default=1)
+  parser.add_argument('-a', '--alphabet', required=True, help='Input sequences can be DNA/Protein', choices=['nt','aa'], default='nt')
+  parser.add_argument('-f', '--keepFrag', nargs = '?', const = 1, type = int, help='Add fragments without clusters', choices=[0,1],default=1)
   parser.add_argument('-z', '--mZip', nargs = '?', const = 0, type = int, help='Create zipped temporary files', default=0)
   parser.add_argument('-p', '--simPer', nargs='?', const=0.8, type=float, help="percent sequence similarity for clustering", default=0.8)
   parser.add_argument('-q', '--thread', nargs='?', const=1, type=int, help="Number of CPU to use for multithreads", default=1)
+  parser.add_argument('-s', '--mIterateLong', nargs='?', const=1000, type=int, help="Number of iterations to refine long alignments", default=1000)
+  parser.add_argument('-m', '--mIterateMerge', nargs='?', const=100, type=int, help="Number of iterations to refine merged alignment", default=100)
+  
   
   args = parser.parse_args()
 
@@ -687,6 +690,8 @@ if __name__=="__main__":
       makeZip = args.mZip,
       simPer = args.simPer,
       thread = args.thread,
+      mIterL = args.mIterateLong,
+      mIterM = args.mIterateMerge,
       fragEmpty = 1,
       longName = 'long.fas',
       fragName = 'frag.fas')
@@ -705,8 +710,8 @@ if __name__=="__main__":
   
   except OSError:
     msg = '\n\nThe sequence file "%s"  cannot be found.' % mArgs.inFile
-    msg += '\n**Please run Pipelign again with correct input file name**'
-    msg += '\nPipelign is exiting.\n'
+    msg += '\n\t**Please run Pipelign again with correct input file name**'
+    msg += '\n\tPipelign is exiting.\n'
     sys.exit(msg)
   
   print('\nPipelign will align sequences in: <%s>' % mArgs.inFile)
@@ -723,13 +728,13 @@ if __name__=="__main__":
   
   addClusterNumberToReps('grp','clusterList.txt','clsReps.fas')
   
-  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread)
+  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL)
   
   makeIQTree('clsReps.aln',mArgs.thread)
   
 
   #print('\n\nNumber of clusters %d' % numClusters)
-  alnFullSequenceClusters(numClusters, mArgs.thread)
+  alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL)
   
   if not mArgs.fragEmpty:
     lFile = 'hmmer.log'
@@ -742,7 +747,7 @@ if __name__=="__main__":
     # next is add fragments to cluster alignments  
     addFragmentsToClusters(numClusters,mArgs.thread)
   
-  mergeClusters(numClusters,mArgs.outFile,addNC,mArgs.thread)
+  mergeClusters(numClusters,mArgs.outFile,addNC,mArgs.thread,mArgs.mIterM)
   print('\nThe alignment is written in %s' % mArgs.outFile)
   
   
