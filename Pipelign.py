@@ -52,14 +52,18 @@ def genCodeLimit(x):
 
 #****************************************
 
-def cZip(cDir,tName):
+def cZip(cDir,tName,zName):
   '''
   creates a zip file of the temporary directory
   '''  
   os.chdir(cDir)
   
-  zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
-  shutil.make_archive(zName,'zip',tName)
+  #zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+  try:
+    shutil.make_archive(zName,'zip',tName)
+  except: 
+    sys.exit(e)
+  
   print('\nArchive for all temporary files created in %s.zip\n' % zName)
   sys.exit()
 
@@ -67,7 +71,7 @@ def cZip(cDir,tName):
 
 #***********************************************************************
 
-def ginsi(seqFile,alnFile,thread,mIterLong,log):
+def ginsi(seqFile,alnFile,thread,mIterLong,log,cDir,tName,zName):
   '''
     - aligns sequences using MAFFT's G-INS-i method
   '''
@@ -79,14 +83,15 @@ def ginsi(seqFile,alnFile,thread,mIterLong,log):
   try:
     subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
 
   lh.close()
 #***********************************************************************
 
 #***********************************************************************
 
-def linsi(seqFile,alnFile,thread,mIterLong,log):
+def linsi(seqFile,alnFile,thread,mIterLong,log,cDir,tName,zName):
   '''
     - aligns sequences using MAFFT's L-INS-i method
   '''
@@ -98,14 +103,15 @@ def linsi(seqFile,alnFile,thread,mIterLong,log):
   try:
     subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
-
+    print(e)
+    cZip(cDir,tName,zName)
+    
   lh.close()
 #***********************************************************************
 
 #***********************************************************************
 
-def fftnsi(seqFile,alnFile,thread,mIterLong,log):
+def fftnsi(seqFile,alnFile,thread,mIterLong,log,cDir,tName,zName):
   '''
     - aligns sequences using MAFFT's FFT-NS-i method
   '''
@@ -117,14 +123,15 @@ def fftnsi(seqFile,alnFile,thread,mIterLong,log):
   try:
     subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
 
   lh.close()
 #***********************************************************************
 
 #***********************************************************************
 
-def fftns2(seqFile,alnFile,thread,mIterLong,log):
+def fftns2(seqFile,alnFile,thread,mIterLong,log,cDir,tName,zName):
   '''
     - aligns sequences using MAFFT's FFT-NS-i method
   '''
@@ -136,8 +143,9 @@ def fftns2(seqFile,alnFile,thread,mIterLong,log):
   try:
     subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
-
+    print(e)
+    cZip(cDir,tName,zName)
+  
   lh.close()
 #***********************************************************************
 
@@ -214,7 +222,7 @@ def separateFullFragment(iFile, thr, longName, fragName):
 #************************************************************************
 
 #************************************************************************
-def runCDHIT(longName, alphabet, per, thread):
+def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
   '''
     CD-HIT is used to group similar sequences together in clusters for alignment
     
@@ -236,7 +244,8 @@ def runCDHIT(longName, alphabet, per, thread):
     try:
       subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
     except subprocess.CalledProcessError as e:
-      sys.exit(e)
+      print(e)
+      cZip(cDir,tName,zName)
       
   elif alphabet == 'aa':
     cl = 'cd-hit -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
@@ -245,7 +254,8 @@ def runCDHIT(longName, alphabet, per, thread):
     try:
       subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
     except subprocess.CalledProcessError as e:
-      sys.exit(e)
+      print(e)
+      cZip(cDir,tName,zName)
   
   lh.close() # close log file   
   
@@ -358,7 +368,7 @@ def addClusterNumberToReps(repName,lstFile,outFile):
 
 #***********************************************************************
 
-def addFragments(fName, aName, oName, thread, log):
+def addFragments(fName,aName,oName,thread,log,cDir,tName,zName):
   '''
     - add fragments to the alignment using MAFFT's --add
   '''
@@ -370,14 +380,15 @@ def addFragments(fName, aName, oName, thread, log):
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
   
   lh.close()
 #***********************************************************************
 
 #***********************************************************************
 
-def makeClusterRepsAlignment(repFile,outFile,thread,mIterL):
+def makeClusterRepsAlignment(repFile,outFile,thread,mIterL,cDir,tName,zName):
   '''
     - Creates a multiple sequence alignment from cluster reps with cluster numbers
     - uses G-INS-i
@@ -386,15 +397,15 @@ def makeClusterRepsAlignment(repFile,outFile,thread,mIterL):
 
   print('\nAligning cluster representative sequences')
   
-  #ginsi(repFile,outFile,thread,mIterL,'clsRepAln.log')
-  fftnsi(repFile,outFile,thread,mIterL,'clsRepAln.log')
+  #ginsi(repFile,outFile,thread,mIterL,'clsRepAln.log',cDir,tName,zName)
+  fftnsi(repFile,outFile,thread,mIterL,'clsRepAln.log',cDir,tName,zName)
   
   print('\tAlignment written in %s' % outFile)
 #***********************************************************************
 
 #***********************************************************************
 
-def makeIQTree(alnFile,thread):
+def makeIQTree(alnFile,thread,cDir,tName,zName):
   '''
     - Constructs phylogenetic tree using IQ-TREE
   '''
@@ -408,7 +419,8 @@ def makeIQTree(alnFile,thread):
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
   
   lh.close()
   
@@ -418,7 +430,7 @@ def makeIQTree(alnFile,thread):
 #***********************************************************************
 
 #***********************************************************************
-def alnFullSequenceClusters(nClusters, thread,mIterL):
+def alnFullSequenceClusters(nClusters,thread,mIterL,cDir,tName,zName):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
   
@@ -437,8 +449,8 @@ def alnFullSequenceClusters(nClusters, thread,mIterL):
     
     if len(seqs) > 1:
       print('\tAligning cluster %d of %d sequences' % (i+1,len(seqs)))
-      #ginsi(cName,aName,thread,mIterL,log)
-      linsi(cName,aName,thread,mIterL,log)
+      #ginsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
+      linsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
     else:
       shutil.copyfile(cName,aName)
 
@@ -446,7 +458,7 @@ def alnFullSequenceClusters(nClusters, thread,mIterL):
 #***********************************************************************  
 
 #***********************************************************************  
-def makeHMMdb(nClusters,cDir,tName,thread,lFile,alpha):
+def makeHMMdb(nClusters,cDir,tName,zName,thread,lFile,alpha):
   '''
     Create profile HMMs for each of the full length alignments 
     Create HMM_DB from the pHMMs
@@ -494,7 +506,7 @@ def makeHMMdb(nClusters,cDir,tName,thread,lFile,alpha):
     except subprocess.CalledProcessError as e:
       #sys.exit(e)
       print(e)
-      cZip(cDir,tName)
+      cZip(cDir,tName,zName)
     print('\t<%s> created' % hName)
   
   print('\nCreating the HMM database from the profile HMMs')
@@ -524,7 +536,7 @@ def makeHMMdb(nClusters,cDir,tName,thread,lFile,alpha):
 #***********************************************************************
 
 #***********************************************************************  
-def searchHMMdb(lFile, thread, fragEmpty,alpha,res):
+def searchHMMdb(lFile,thread,fragEmpty,alpha,res,cDir,tName,zName):
   '''
     HMM database is searched with the fragments to assign them a cliuster for alignment
   '''  
@@ -539,14 +551,16 @@ def searchHMMdb(lFile, thread, fragEmpty,alpha,res):
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
-        sys.exit(e)
+        print(e)
+        cZip(cDir,tName,zName)
       
     elif alpha == 'aa':
       cl = 'hmmscan --cpu %d --tblout %s --noali grp.hmm frag.fas' % (thread,res)
       try:
         subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
       except subprocess.CalledProcessError as e:
-        sys.exit(e)
+        print(e)
+        cZip(cDir,tName,zName)
   
   #else:
     #print('\nNo fragment sequence present')
@@ -638,7 +652,7 @@ def parseHMMsearchResult(nClusters,fragFile,res,keepFrag):
 #************************************************************************
 
 #************************************************************************
-def addFragmentsToClusters(nClusters, thread):
+def addFragmentsToClusters(nClusters,thread,cDir,tName,zName):
   '''
     Fragments are added to their corresponding cluster alignments
     MAFFT's "--addfragments" is used for adding fragments
@@ -655,14 +669,14 @@ def addFragmentsToClusters(nClusters, thread):
     if os.path.exists(aName) and os.stat(aName).st_size > 0:
       if os.path.exists(fName) and os.stat(fName).st_size > 0:
         print('\nAdding fragments from <%s> to <%s>' % (fName,aName)) 
-        addFragments(fName, aName, oName, thread, log)
+        addFragments(fName,aName,oName,thread,log,cDir,tName,zName)
       else:
         shutil.copy(aName,oName)
 
   lh.close()
 #************************************************************************
 
-def mergeClusters(nClusters,outFile,addNClusters,thread,mIterM):
+def mergeClusters(nClusters,outFile,addNClusters,thread,mIterM,cDir,tName,zName):
   '''
     - Merge clusters into one large alignment
     - adds the fragments that were not assigned any cluster if chosen by the user 
@@ -732,7 +746,8 @@ def mergeClusters(nClusters,outFile,addNClusters,thread,mIterM):
     try:
       subprocess.check_call(catText,shell=True,stdout=lh,stderr=lh)
     except subprocess.CalledProcessError as e:
-      sys.exit(e)
+      print(e)
+      cZip(cDir,tName,zName)
 
     fh = open('subMSAtable','w')
     fh.write(mTab)
@@ -747,7 +762,8 @@ def mergeClusters(nClusters,outFile,addNClusters,thread,mIterM):
   try:
     subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
   except subprocess.CalledProcessError as e:
-    sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
   
   if os.path.exists('out.aln') and os.stat('out.aln').st_size > 0:
     shutil.copy('out.aln',outFile)
@@ -813,34 +829,45 @@ if __name__=="__main__":
   tName1 = 'in.fas'
   tName2 = 'input.fas'
   
-  #'''
-  # create temporary directory
+  # check whether input file exists or exit
   
-  if mArgs.tempDirPath is None:
-    try:
-      tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
-      tFileName = tempDir.name + '/' + tName1 
-      shutil.copyfile(mArgs.inFile,tFileName) # copy input file to temporary directory 
-      tName = tempDir.name
-  
-    except OSError:
-      msg = '\n\nThe sequence file "%s"  cannot be found' % mArgs.inFile
+  if not os.path.exists(mArgs.inFile) or os.stat(mArgs.inFile).st_size == 0:
+      msg = '\n\nError: input sequence file "%s"  could not be found' % mArgs.inFile
       msg += '\n\t**Please run Pipelign again with correct input file name**'
       msg += '\n\tPipelign is exiting\n'
       sys.exit(msg)
   
+  # get name for the zipped temporary directory
+  zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+
+  # create temporary directory
+  
+  if mArgs.tempDirPath is None: # no path provided for temp directory
+    try:
+      tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
+      tName = tempDir.name
+    except OSError:
+      sys.exit('\nError: system could not create temporary directory. Please try again')
+  
   else:
     if os.path.exists(mArgs.tempDirPath):
-      tempDir = mArgs.tempDirPath + '/' + 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S')
+      tempDir = mArgs.tempDirPath + '/' + zName
+      tName = tempDir
       try:
         os.mkdir(tempDir)
       except OSError:
-        sys.exit('\nCould not create temporary directory. Please try again')
-      tFileName = tempDir + '/' + tName1
-      shutil.copyfile(mArgs.inFile,tFileName) # copy input file to temporary directory 
-      tName = tempDir
+        sys.exit('\nError: system could not create temporary directory. Please try again')
     else:
-      sys.exit('\nPath for temporary directory does not exists. Please run again with correct path.')
+      sys.exit('\nError: Path for temporary directory does not exists. Please run again with correct path.')
+      
+  # copy input file inside the temporary directory
+  tFileName = tName + '/' + tName1
+  
+  try:  
+    shutil.copyfile(mArgs.inFile,tFileName)  
+  except OSError:
+      sys.exit('\nError: could not copy input file into temp directory. Please try again ')
+  
   
   print('\nPipelign will align sequences in: <%s>' % mArgs.inFile)
   
@@ -850,49 +877,38 @@ if __name__=="__main__":
   deAlign(tName1, tName2) # removes any possible gaps from the sequence file
   mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
   
-  runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread)
+  runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
     
   numClusters = makeClusters(mArgs.longName)
   
   addClusterNumberToReps('grp','clusterList.txt','clsReps.fas')
   
-  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL)
+  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
   
   if numClusters > 2:
-    makeIQTree('clsReps.aln',mArgs.thread)
+    makeIQTree('clsReps.aln',mArgs.thread,cDir,tName,zName)
   
   else:
     print('\nNumber of cluster representative(s) is %d. Phylogenetic tree can not be built' % numClusters)
     
   #print('\n\nNumber of clusters %d' % numClusters)
-  alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL)
+  alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
   
   if not mArgs.fragEmpty:
     lFile = 'hmmer.log'
     oFile = 'hmm.out'
-    makeHMMdb(numClusters,cDir,tName,mArgs.thread,lFile,mArgs.alphabet)
-    searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile)
+    makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
+    searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
     
     #numClusters = 2
     addNC = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepFrag)
     # next is add fragments to cluster alignments  
-    addFragmentsToClusters(numClusters,mArgs.thread)
+    addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
   
-  mergeClusters(numClusters,mArgs.outFile,addNC,mArgs.thread,mArgs.mIterM)
+  mergeClusters(numClusters,mArgs.outFile,addNC,mArgs.thread,mArgs.mIterM,cDir,tName,zName)
   print('\nThe alignment is written in %s' % mArgs.outFile)
   
-  
-  os.chdir(cDir)
-  
-  # create zipped file for temporary directory if -z 1 is used
-  if args.mZip:
-    if mArgs.tempDirPath is None:
-      zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
-    else:
-      zName = tName
-    
-    shutil.make_archive(zName,'zip',tName)
-    print('\nArchive for all temporary files created in %s.zip\n' % zName)
-  
+  if mArgs.makeZip:
+    cZip(cDir,tName,zName)
 #************************************************************  
 
