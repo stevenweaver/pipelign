@@ -15,6 +15,7 @@ import sys, os, shutil, subprocess, argparse
 from Bio import SeqIO
 import tempfile
 import time
+from Bio import Phylo
 
 #************************************
 class Struct:
@@ -41,6 +42,15 @@ def lengthThreshold(x):
     raise argparse.ArgumentTypeError('%r not in range [0.0, 1.0]' % (x,))
   return x
 #***************************************
+
+#******************************************
+def iterThreshold(x):
+  x = int(x)
+  if x < 1:
+    raise argparse.ArgumentTypeError('%r must be a non-zero positive integer' % (x,))
+  return x
+#***************************************
+
 
 #****************************************
 def genCodeLimit(x):
@@ -423,6 +433,24 @@ def makeIQTree(alnFile,thread,cDir,tName,zName):
 #***********************************************************************
 
 #***********************************************************************
+def drawTree(treeFile):
+  '''
+   - Displays a dendogram of the tree generated from cluster representatives
+  '''
+  
+  print('\nThe phylogenetic tree for the cluster representatives is shown below:\n')
+  tree = Phylo.read(treeFile,'newick')
+  Phylo.draw_ascii(tree)
+  print('\n')
+  '''
+  try:
+    input('press ENTER to continue: ')
+  except SyntaxError:
+    pass
+  '''
+#***********************************************************************
+
+#***********************************************************************
 def alnFullSequenceClusters(nClusters,thread,mIterL,cDir,tName,zName):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
@@ -439,7 +467,7 @@ def alnFullSequenceClusters(nClusters,thread,mIterL,cDir,tName,zName):
     seqs = list(SeqIO.parse(cName,'fasta'))
     
     if len(seqs) > 1:
-      print('\tAligning cluster %d of %d sequences' % (i+1,len(seqs)))
+      print('\tAligning cluster %d of %d sequences' % (i,len(seqs)))
       #ginsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
       #linsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
       fftnsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
@@ -602,7 +630,7 @@ def parseHMMsearchResult(nClusters,fragFile,res,keepFrag):
     
     if len(fcseqs) > 0:
       SeqIO.write(fcseqs, fcName, 'fasta')
-      print('\t<%s>' % fcName)
+      print('\t<%s> contains %d fragments' % (fcName,len(fcseqs)))
     
   #print(fSeqIDs)
   #print(fIndex) 
@@ -666,7 +694,7 @@ def addFragmentsToClusters(nClusters,thread,cDir,tName,zName):
 #************************************************************************
 
 #***********************************************************************
-def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName):
+def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx):
   '''
     - Merge clusters into one large alignment
     - adds the fragments that were not assigned any cluster if chosen by the user 
@@ -687,6 +715,9 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName):
   mFlag = False
   
   for i in range(nClusters):
+    if i in lEx:
+      continue
+    
     cName = 'cls.' + str(i) + '.aln' # name of the cluster alignment file
     seqs = list(SeqIO.parse(cName,'fasta')) # reading the alignment
     if len(seqs) > 1: # if more than one sequence in the alignment
@@ -725,8 +756,8 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName):
     fh.write(mTab)
     fh.close()
   
-    #cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses L-INS-i
-    cl = 'mafft --preservecase --thread %d --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses FFT-NS-i
+    cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses L-INS-i
+    #cl = 'mafft --preservecase --thread %d --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses FFT-NS-i
   
   else:
     cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d orphanSeqs.fasta > out.aln' % (thread,mIterM) # if no alignment
@@ -759,10 +790,10 @@ def getArguments():
   parser.add_argument('-a', '--alphabet', required=True, help='Input sequences can be DNA/Protein', choices=['dna','aa','rna'], default='dna')
   parser.add_argument('-f', '--keepFrag', help='Add fragments without clusters', action="store_true")
   parser.add_argument('-z', '--mZip', help='Create zipped temporary files', action="store_true")
-  parser.add_argument('-p', '--simPer', nargs='?', const=0.8, type=float, help="percent sequence similarity for clustering", default=0.8)
+  parser.add_argument('-p', '--simPer', type=lengthThreshold, help="percent sequence similarity for clustering", default=0.8)
   parser.add_argument('-q', '--thread', nargs='?', const=1, type=int, help="Number of CPU to use for multithreads", default=1)
-  parser.add_argument('-s', '--mIterateLong', nargs='?', const=1000, type=int, help="Number of iterations to refine long alignments", default=1000)
-  parser.add_argument('-m', '--mIterateMerge', nargs='?', const=100, type=int, help="Number of iterations to refine merged alignment", default=100)
+  parser.add_argument('-s', '--mIterateLong', type=iterThreshold, help="Number of iterations to refine long alignments", default=1000)
+  parser.add_argument('-m', '--mIterateMerge', type=iterThreshold, help="Number of iterations to refine merged alignment", default=100)
   parser.add_argument('-d', '--tempDirPath', required=False, help="Path for temporary directory",default=None)
   
   
@@ -857,8 +888,21 @@ if __name__=="__main__":
   #'''
   makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
   
+  clsExclude = list()
+  
   if numClusters > 2:
     makeIQTree('clsReps.aln',mArgs.thread,cDir,tName,zName)
+    drawTree('clsReps.aln.treefile')
+    print('All %d cluster(s) will be added to the final alignment' % numClusters)
+    
+    inChoice = input('Clusters you want to exclude: ')
+    clsL = inChoice.split()
+    for c in clsL:
+      if 0 <= int(c) <= numClusters:
+        clsExclude.append(int(c))
+        print('\tCluster %d will not be added to the final alignment' % int(c))
+      else:
+        print('\t%d is not a valid cluster number' % int(c))
   
   else:
     print('\nNumber of cluster representative(s) is %d. Phylogenetic tree can not be built' % numClusters)
@@ -878,7 +922,7 @@ if __name__=="__main__":
   # next is add fragments to cluster alignments  
   addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
   
-  mergeClusters(numClusters,mArgs.outFile,mArgs.keepFrag,mArgs.thread,mArgs.mIterM,cDir,tName,zName)
+  mergeClusters(numClusters,mArgs.outFile,mArgs.keepFrag,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
   print('\nThe alignment is written in %s' % mArgs.outFile)
   
   if mArgs.makeZip:
