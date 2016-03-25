@@ -716,6 +716,7 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
   #*********
   oSeqs = [] # contains orphan long sequences and fragments
   mFlag = False
+  fFlag = False
   
   for i in range(nClusters):
     if i in lEx:
@@ -741,7 +742,7 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
   
   if len(oSeqs) > 0: # if at least one orphan sequence present
     SeqIO.write(oSeqs,'orphanSeqs.fasta','fasta') # write orphan long and fragments in file
-    catText += 'orphanSeqs.fasta ' 
+    catText += 'orphanSeqs.fasta '
   
   catText += '> merge'
 
@@ -762,18 +763,31 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
     cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses L-INS-i
     #cl = 'mafft --preservecase --thread %d --maxiterate %d --merge subMSAtable merge > out.aln' % (thread,mIterM) # uses FFT-NS-i
   
-  else:
+  elif len(oSeqs) > 1:
     cl = 'mafft --preservecase --thread %d --localpair --maxiterate %d orphanSeqs.fasta > out.aln' % (thread,mIterM) # if no alignment
-    
-  try:
-    subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
-  except subprocess.CalledProcessError as e:
-    print(e)
-    cZip(cDir,tName,zName)
+    fFlag = True
   
-  if os.path.exists('out.aln') and os.stat('out.aln').st_size > 0:
-    shutil.copy('out.aln',outFile)
-    #print(outFile)
+  elif len(oSeqs) == 1:
+    print('\nAligning only one sequences.')
+    try:  
+      shutil.copyfile('orphanSeqs.fasta',outFile)  
+    except OSError as e:
+      print(e)
+      sys.exit('\nError: could not copy <orphanSeqs.fasta> into <%s>. Please run Pipelign again' % outFile)
+    
+  if mFlag or fFlag:
+    try:
+      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+    except subprocess.CalledProcessError as e:
+      print(e)
+      cZip(cDir,tName,zName)
+  
+    if os.path.exists('out.aln') and os.stat('out.aln').st_size > 0:
+      try:
+        shutil.copy('out.aln',outFile)
+      except OSError as e:
+        print(e)
+        sys.exit('\nError: could not copy <out.aln> into <%s>. Please run Pipelign again' % outFile)
   
   lh.close()
   
@@ -852,7 +866,7 @@ if __name__=="__main__":
     try:
       tempDir = tempfile.TemporaryDirectory() # create temporary directory to hold intermediary files
       tName = tempDir.name
-    except OSError:
+    except OSError as e:
       sys.exit('\nError: system could not create temporary directory. Please try again')
   
   else:
@@ -861,7 +875,7 @@ if __name__=="__main__":
       tName = tempDir
       try:
         os.mkdir(tempDir)
-      except OSError:
+      except OSError as e:
         sys.exit('\nError: system could not create temporary directory. Please try again')
     else:
       sys.exit('\nError: Path for temporary directory does not exists. Please run again with correct path.')
@@ -871,7 +885,7 @@ if __name__=="__main__":
   
   try:  
     shutil.copyfile(mArgs.inFile,tFileName)  
-  except OSError:
+  except OSError as e:
       sys.exit('\nError: could not copy input file into temp directory. Please try again ')
   
   
