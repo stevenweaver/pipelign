@@ -315,6 +315,8 @@ def makeClusters(longName):
   
   ids = [] # IDs for the full sequences
   
+  clsSize = list()
+  
   for seq in seqs:
     ids.append(seq.id)
   
@@ -333,6 +335,7 @@ def makeClusters(longName):
       cls = cls + 1
       SeqIO.write(cSeq,gName,'fasta')
       cSeq = []
+      clsSize.append(len(cSeq))
     else: # continue with the existing cluster
       seqID = lines[i].split()[2].replace('>','').replace('...','')
       st += seqID + '\t' + str(cls) + '\n' # updating clusterList file content
@@ -349,12 +352,12 @@ def makeClusters(longName):
   
   print('\tTotal %d cluster file(s) created; example name <cls.0.fas>' % cls)
   
-  return cls   
+  return cls, clsSize   
 #***********************************************************************
 
 #***********************************************************************
 
-def addClusterNumberToReps(repName,lstFile,outFile):
+def addClusterNumberToReps(repName,lstFile,outFile,clsSize):
   '''
     - Reads in the cluster representative FASTA file and the clusterList.txt file
     - Adds cluster number to the sequence header e.g. >seq1_0  
@@ -379,7 +382,7 @@ def addClusterNumberToReps(repName,lstFile,outFile):
     if seq.id in cID:
       ind = cID.index(seq.id)
       
-      seq.id = seq.id + '_' + cNum[ind]
+      seq.id = seq.id + '_' + str(cNum.count(cNum[ind])) + '_' + cNum[ind] 
       seq.name = seq.id
       seq.description = seq.id
     else:
@@ -882,9 +885,9 @@ if __name__=="__main__":
   
   runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
     
-  numClusters = makeClusters(mArgs.longName)
+  numClusters, clsSize = makeClusters(mArgs.longName)
   
-  addClusterNumberToReps('grp','clusterList.txt','clsReps.fas')
+  addClusterNumberToReps('grp','clusterList.txt','clsReps.fas',clsSize)
   #'''
   makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
   
