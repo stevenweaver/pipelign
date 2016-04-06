@@ -296,10 +296,12 @@ def makeClusters(longName):
   print('\nCreating cluster files for long sequences')
   
   seqs = list(SeqIO.parse(longName,'fasta')) # load all the full sequences
+
+  clsSize = list()
   
   if len(seqs) < 2:
     shutil.copy(longName,'grp.0.fas')
-    return 1
+    return 1, clsSize
   
   cName = 'grp.clstr'
   
@@ -314,8 +316,6 @@ def makeClusters(longName):
   st = '' # clusterList string
   
   ids = [] # IDs for the full sequences
-  
-  clsSize = list()
   
   for seq in seqs:
     ids.append(seq.id)
@@ -705,10 +705,26 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
   
   print('\nMerging all cluster alignments together')
   
-  if nClusters == 1 and not keepFrag: 
-    shutil.copy('cls.0.aln',outFile)
-    return
-  
+  if nClusters == 1: 
+    if not keepFrag: 
+      try:
+        shutil.copy('cls.0.aln',outFile)
+        return
+      except OSError as e:
+        print(e)
+        cZip(cDir,tName,zName)
+    else:
+      if os.path.exists('frag.noClusters.fas') and os.stat('frag.noClusters.fas').st_size > 0:
+        addFragments('frag.noClusters.fas','cls.0.aln',outFile,thread,log,cDir,tName,zName)
+        return
+      else:
+        try:
+          shutil.copy('cls.0.aln',outFile)
+          return
+        except OSError as e:
+          print(e)
+          cZip(cDir,tName,zName)
+      
   seqCount = 1
   catText = 'cat '
   mTab = ''
@@ -768,12 +784,12 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
     fFlag = True
   
   elif len(oSeqs) == 1:
-    print('\nAligning only one sequences.')
+    print('\nAligning only one sequence.')
     try:  
       shutil.copyfile('orphanSeqs.fasta',outFile)  
     except OSError as e:
       print(e)
-      sys.exit('\nError: could not copy <orphanSeqs.fasta> into <%s>. Please run Pipelign again' % outFile)
+      cZip(cDir,tName,zName)
     
   if mFlag or fFlag:
     try:
@@ -787,7 +803,7 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
         shutil.copy('out.aln',outFile)
       except OSError as e:
         print(e)
-        sys.exit('\nError: could not copy <out.aln> into <%s>. Please run Pipelign again' % outFile)
+        cZip(cDir,tName,zName)
   
   lh.close()
   
@@ -901,6 +917,9 @@ if __name__=="__main__":
     
   numClusters, clsSize = makeClusters(mArgs.longName)
   
+  if numClusters == 0:
+    sys.exit('\nError: Something went wrong during clustering sequences. Please check the input file')
+    
   addClusterNumberToReps('grp','clusterList.txt','clsReps.fas',clsSize)
   #'''
   makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
@@ -940,6 +959,7 @@ if __name__=="__main__":
   addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
   
   mergeClusters(numClusters,mArgs.outFile,mArgs.keepFrag,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
+
   print('\nThe alignment is written in %s' % mArgs.outFile)
   
   if mArgs.makeZip:
