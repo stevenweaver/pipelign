@@ -454,6 +454,25 @@ def drawTree(treeFile):
 #***********************************************************************
 
 #***********************************************************************
+def drawMidPointRootTree(treeFile):
+  '''
+   - Displays a dendogram of the tree generated from cluster representatives
+  '''
+  
+  print('\nThe phylogenetic tree for the cluster representatives is shown below:\n')
+  tree = Phylo.read(treeFile,'newick')
+  tree.root_at_midpoint()
+  Phylo.draw_ascii(tree)
+  print('\n')
+  '''
+  try:
+    input('press ENTER to continue: ')
+  except SyntaxError:
+    pass
+  '''
+#***********************************************************************
+
+#***********************************************************************
 def alnFullSequenceClusters(nClusters,thread,mIterL,cDir,tName,zName):
   '''
     Full sequences in each clusters will be aligned using L-INS-i/clustalo
@@ -928,7 +947,8 @@ if __name__=="__main__":
   
   if numClusters > 2:
     makeIQTree('clsReps.aln',mArgs.thread,cDir,tName,zName)
-    drawTree('clsReps.aln.treefile')
+    #drawTree('clsReps.aln.treefile')
+    drawMidPointRootTree('clsReps.aln.treefile')
     print('All %d cluster(s) will be added to the final alignment' % numClusters)
     
     inChoice = input('Clusters you want to exclude: ')
