@@ -608,7 +608,7 @@ def searchHMMdb(lFile,thread,fragEmpty,alpha,res,cDir,tName,zName):
 #**********************************************************************
 
 #**********************************************************************    
-def parseHMMsearchResult(nClusters,fragFile,res,keepFrag):
+def parseHMMsearchResult(nClusters,fragFile,res,keepOrphans):
   '''
     Reads in the result file from hmm.out file to determine cluster for fragments
   '''
@@ -671,13 +671,13 @@ def parseHMMsearchResult(nClusters,fragFile,res,keepFrag):
     print('\nThe following fragments did not match with any cluster')
     print('\n%s\n' % ncIds)
 
-    if keepFrag:
+    if keepOrphans:
       print('But will be added to the final alignment')
       #print('\nUse the flag "-f 0" to exclude these from the final alignment')
       return True
     
     else: # user did not explicitely asked to add orphan fragments  
-      print('Please use "-f" flag to include fragments without clusters')
+      print('**You can use "-f" flag to explicitely include fragments without clusters**\n')
       while True:
         choice = input('Do you want to add these sequences to the alignment (y/n)? ')
         if choice.strip() == 'y' or choice.strip() == 'Y':
@@ -710,13 +710,17 @@ def addFragmentsToClusters(nClusters,thread,cDir,tName,zName):
         print('\nAdding fragments from <%s> to <%s>' % (fName,aName)) 
         addFragments(fName,aName,oName,thread,log,cDir,tName,zName)
       else:
-        shutil.copy(aName,oName)
+        try:
+          shutil.copy(aName,oName)
+        except OSError as e:
+          print(e)
+          cZip(cDir,tName,zName)
 
   lh.close()
 #************************************************************************
 
 #***********************************************************************
-def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx):
+def mergeClusters(nClusters,outFile,keepOrphans,thread,mIterM,cDir,tName,zName,lEx):
   '''
     - Merge clusters into one large alignment
     - adds the fragments that were not assigned any cluster if chosen by the user 
@@ -725,7 +729,7 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
   print('\nMerging all cluster alignments together')
   
   if nClusters == 1: 
-    if not keepFrag: 
+    if not keepOrphans: 
       try:
         shutil.copy('cls.0.aln',outFile)
         return
@@ -769,7 +773,7 @@ def mergeClusters(nClusters,outFile,keepFrag,thread,mIterM,cDir,tName,zName,lEx)
     else:
       oSeqs.append(seqs[0]) # if only one sequence in the alignment, write to orphan file
 
-  if keepFrag and os.path.exists('frag.noClusters.fas'): # if there exists orphan fragments
+  if keepOrphans and os.path.exists('frag.noClusters.fas'): # if there exists orphan fragments
     feqs = list(SeqIO.parse('frag.noClusters.fas','fasta'))
     for seq in feqs:
       oSeqs.append(seq) # add fragments to orphan seqs file
@@ -840,13 +844,15 @@ def getArguments():
   parser.add_argument('-t', '--thr', type=lengthThreshold, help="Length threshold for full sequences", default=0.5)
   parser.add_argument('-c', '--code', type=int, help="Genetic code for translation",default=1, choices=[1,2,3,4,5,6,9,10,11,12,13,14,16,21,22,23,24,25])
   parser.add_argument('-a', '--alphabet', required=True, help='Input sequences can be DNA/Protein', choices=['dna','aa','rna'], default='dna')
-  parser.add_argument('-f', '--keepFrag', help='Add fragments without clusters', action="store_true")
+  parser.add_argument('-f', '--keepOrphans', help='Add fragments without clusters', action="store_true")
   parser.add_argument('-z', '--mZip', help='Create zipped temporary files', action="store_true")
   parser.add_argument('-p', '--simPer', type=lengthThreshold, help="percent sequence similarity for clustering", default=0.8)
   parser.add_argument('-q', '--thread', nargs='?', const=1, type=int, help="Number of CPU to use for multithreads", default=1)
   parser.add_argument('-s', '--mIterateLong', type=iterThreshold, help="Number of iterations to refine long alignments", default=1000)
   parser.add_argument('-m', '--mIterateMerge', type=iterThreshold, help="Number of iterations to refine merged alignment", default=100)
   parser.add_argument('-d', '--tempDirPath', required=False, help="Path for temporary directory",default=None)
+  parser.add_argument('-l', '--longSeqsOnly', help='Only align long sequences', action="store_true")
+
   
   
   args = parser.parse_args()
@@ -868,7 +874,7 @@ if __name__=="__main__":
       lenThr = args.thr,
       gCode = args.code,
       alphabet = args.alphabet,
-      keepFrag = args.keepFrag,
+      keepOrphans = args.keepOrphans,
       makeZip = args.mZip,
       simPer = args.simPer,
       thread = args.thread,
@@ -877,7 +883,8 @@ if __name__=="__main__":
       fragEmpty = 1,
       longName = 'long.fas',
       fragName = 'frag.fas',
-      tempDirPath = args.tempDirPath)
+      tempDirPath = args.tempDirPath,
+      longSeqsOnly = args.longSeqsOnly)
   
   
   cDir = os.getcwd() # save current working directory
@@ -966,21 +973,34 @@ if __name__=="__main__":
   #print('\n\nNumber of clusters %d' % numClusters)
   alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
   
-  if not mArgs.fragEmpty:
-    lFile = 'hmmer.log'
-    oFile = 'hmm.out'
-    makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
-    searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
+  if not mArgs.longSeqsOnly: # add fragments to final alignment
+    if not mArgs.fragEmpty:
+      lFile = 'hmmer.log'
+      oFile = 'hmm.out'
+      makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
+      searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
     
     #numClusters = 2
-    mArgs.keepFrag = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepFrag)
+    mArgs.keepOrphans = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepOrphans)
   
-  # next is add fragments to cluster alignments  
-  addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
+    # next is add fragments to cluster alignments  
+    addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
   
-  mergeClusters(numClusters,mArgs.outFile,mArgs.keepFrag,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
+  else: # only align long sequences
+    print("\n**Pipelign is running with '-l' flag. So only long sequences will be added to the final alignment**")
+    for i in range(numClusters):
+      try:
+        aName = 'grp.' + str(i) + '.aln'
+        oName = 'cls.' + str(i) + '.aln'
 
-  print('\nThe alignment is written in %s' % mArgs.outFile)
+        shutil.copy(aName,oName)
+      except OSError as e:
+        print(e)
+        cZip(cDir,tName,zName) 
+  
+  mergeClusters(numClusters,mArgs.outFile,mArgs.keepOrphans,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
+
+  print('\nThe alignment is written in <%s>\n' % mArgs.outFile)
   
   if mArgs.makeZip:
     cZip(cDir,tName,zName)
