@@ -203,6 +203,11 @@ def deAlign(iFile, dFile):
   
 #*************************************************************************
 
+#*************************************************************************
+def getLengths(inFile):
+  '''
+  '''
+
 #************************************************************************
 
 def separateFullFragment(iFile, thr, longName, fragName):
@@ -937,6 +942,18 @@ if __name__=="__main__":
   #change current working directory to the temp
   os.chdir(tName)
   deAlign(tName1, tName2) # removes any possible gaps from the sequence file
+  
+  # plot a sequence length distribution and save it as svg file
+  cl = 'Rscript ~/bin/lengthDistribution.R %s ../lengthDistribution.svg' % tName2
+  
+  try:
+    subprocess.check_call(cl,shell=True,stdout=None,stderr=None)
+  except subprocess.CalledProcessError as e:
+    #sys.exit(e)
+    print(e)
+    cZip(cDir,tName,zName)
+  print('\t<lengthDistribution.svg> created')
+  
   mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
   
   runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
@@ -987,7 +1004,7 @@ if __name__=="__main__":
     addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
     
     cl = 'Rscript ~/bin/freqsLongFrags.R clsReps.aln.treefile clusterList.txt '
-    cl += 'hmm.out stat.frequency.long.svg stat.frequency.fragments.svg'
+    cl += 'hmm.out ../stat.frequency.long.svg ../stat.frequency.fragments.svg'
     
     lh = open('stat.frequency.log','w')
     try:
@@ -1013,7 +1030,7 @@ if __name__=="__main__":
         cZip(cDir,tName,zName) 
 
     cl = 'Rscript ~/bin/freqsLong.R clsReps.aln.treefile clusterList.txt '
-    cl += 'stat.frequency.long.svg'
+    cl += '../stat.frequency.long.svg'
     
     lh = open('stat.frequency.log','w')
     try:
