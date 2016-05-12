@@ -985,6 +985,20 @@ if __name__=="__main__":
   
     # next is add fragments to cluster alignments  
     addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
+    
+    cl = 'Rscript ~/bin/freqsLongFrags.R clsReps.aln.treefile clusterList.txt '
+    cl += 'hmm.out stat.frequency.long.svg stat.frequency.fragments.svg'
+    
+    lh = open('stat.frequency.log','w')
+    try:
+      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+    except subprocess.CalledProcessError as e:
+      #sys.exit(e)
+      print(e)
+      cZip(cDir,tName,zName)
+    print('\t<stat.frequency.long.svg> created')
+    print('\t<stat.frequency.fragments.svg> created')
+    lh.close()
   
   else: # only align long sequences
     print("\n**Pipelign is running with '-l' flag. So only long sequences will be added to the final alignment**")
@@ -997,7 +1011,21 @@ if __name__=="__main__":
       except OSError as e:
         print(e)
         cZip(cDir,tName,zName) 
+
+    cl = 'Rscript ~/bin/freqsLong.R clsReps.aln.treefile clusterList.txt '
+    cl += 'stat.frequency.long.svg'
+    
+    lh = open('stat.frequency.log','w')
+    try:
+      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+    except subprocess.CalledProcessError as e:
+      #sys.exit(e)
+      print(e)
+      cZip(cDir,tName,zName)
+    print('\t<stat.frequency.long.svg> created')
+    lh.close()
   
+ 
   mergeClusters(numClusters,mArgs.outFile,mArgs.keepOrphans,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
 
   print('\nThe alignment is written in <%s>\n' % mArgs.outFile)
