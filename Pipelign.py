@@ -905,7 +905,8 @@ if __name__=="__main__":
       sys.exit(msg)
   
   # get name for the zipped temporary directory
-  zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S') 
+  timeNow = time.strftime('%Y-%m-%d-%H%M%S')
+  zName = 'pipelign.' + timeNow 
 
   # create temporary directory
   
@@ -944,8 +945,8 @@ if __name__=="__main__":
   deAlign(tName1, tName2) # removes any possible gaps from the sequence file
   
   # plot a sequence length distribution and save it as svg file
-  cl = 'Rscript %s/pipelignRscripts/lengthDistribution.R %s ../lengthDistribution.svg' % (cDir,tName2)
-  
+  #cl = 'Rscript %s/pipelignRscripts/lengthDistribution.R %s ../lengthDistribution.svg' % (cDir,tName2)
+  cl = 'lengthDistribution.R %s ../lengthDistribution.svg' % tName2
   try:
     subprocess.check_call(cl,shell=True,stdout=None,stderr=None)
   except subprocess.CalledProcessError as e:
@@ -1003,7 +1004,8 @@ if __name__=="__main__":
     # next is add fragments to cluster alignments  
     addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
     
-    cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
+    #cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
+    cl = 'freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' 
     cl += 'hmm.out ../stat.frequency.long.svg ../stat.frequency.fragments.svg'
     
     lh = open('stat.frequency.log','w')
@@ -1029,7 +1031,8 @@ if __name__=="__main__":
         print(e)
         cZip(cDir,tName,zName) 
 
-    cl = 'Rscript %s/pipelignRscripts/freqsLong.R clsReps.aln.treefile clusterList.txt ' % cDir
+    #cl = 'Rscript %s/pipelignRscripts/freqsLong.R clsReps.aln.treefile clusterList.txt ' % cDir
+    cl = 'freqsLong.R clsReps.aln.treefile clusterList.txt ' 
     cl += '../stat.frequency.long.svg'
     
     lh = open('stat.frequency.log','w')
