@@ -944,7 +944,7 @@ if __name__=="__main__":
   deAlign(tName1, tName2) # removes any possible gaps from the sequence file
   
   # plot a sequence length distribution and save it as svg file
-  cl = 'Rscript ~/bin/lengthDistribution.R %s ../lengthDistribution.svg' % tName2
+  cl = 'Rscript %s/pipelignRscripts/lengthDistribution.R %s ../lengthDistribution.svg' % (cDir,tName2)
   
   try:
     subprocess.check_call(cl,shell=True,stdout=None,stderr=None)
@@ -1003,7 +1003,7 @@ if __name__=="__main__":
     # next is add fragments to cluster alignments  
     addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
     
-    cl = 'Rscript ~/bin/freqsLongFrags.R clsReps.aln.treefile clusterList.txt '
+    cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
     cl += 'hmm.out ../stat.frequency.long.svg ../stat.frequency.fragments.svg'
     
     lh = open('stat.frequency.log','w')
@@ -1029,7 +1029,7 @@ if __name__=="__main__":
         print(e)
         cZip(cDir,tName,zName) 
 
-    cl = 'Rscript ~/bin/freqsLong.R clsReps.aln.treefile clusterList.txt '
+    cl = 'Rscript %s/pipelignRscripts/freqsLong.R clsReps.aln.treefile clusterList.txt ' % cDir
     cl += '../stat.frequency.long.svg'
     
     lh = open('stat.frequency.log','w')
