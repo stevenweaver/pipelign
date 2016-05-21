@@ -1,5 +1,5 @@
 # Use phusion/baseimage as base image
-FROM phusion/baseimage:latest
+FROM phusion/baseimage:0.9.18
 
 # Set environment variables the phusion way
 RUN echo en_US.UTF-8 > /etc/container_environment/LANGUAGE
@@ -10,7 +10,7 @@ RUN echo UTF-8 > /etc/container_environment/PYTHONIOENCODING
 # Use baseimage-docker's init system.
 CMD ["/sbin/my_init"]
 
-MAINTAINER Simon Frost <sdwfrost@gmail.com>
+MAINTAINER Simon Frost <sdwfrost@gmail.com> and Mukarram Hossain <mukarram819@gmail.com>
 
 ## Set a default user. Available via runtime flag `--user docker`
 RUN useradd docker \
@@ -32,9 +32,12 @@ RUN apt-get update -qq && \
 # Install the recent pip release
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
 	python3 get-pip.py && \
-	rm get-pip.py
+	rm get-pip.py	
 
-# Imstall Biopython
+# Install numpy
+RUN pip3 install numpy
+
+# Install Biopython
 RUN pip3 install biopython
 
 # Install CD-HIT
@@ -53,19 +56,20 @@ RUN cd /home/docker/programs && \
 	mkdir build && \
 	cd build && \
 	cmake -DIQTREE_FLAGS=omp .. && \
+	make && \
 	cp iqtree-omp /usr/local/bin && \
 	rm -rf /home/docker/programs/IQ-TREE
 
 # Install MAFFT
 RUN cd /home/docker/programs && \
-	wget http://mafft.cbrc.jp/alignment/software/mafft-7.273-without-extensions-src.tgz && \
-	tar zxvf ./mafft-7.273-without-extensions-src.tgz && \
-	cd mafft-7.273-without-extensions-src/core && \
+	wget http://mafft.cbrc.jp/alignment/software/mafft-7.294-without-extensions-src.tgz && \
+	tar zxvf mafft-7.294-without-extensions-src.tgz && \
+	cd mafft-7.294-without-extensions/core && \
 	make clean && \
 	make && \
 	make install && \
-	rm /home/docker/programs/mafft-7.273-without-extensions-src.tgz && \
-	rm -rf /home/docker/programs/mafft-7.273-without-extensions-src
+	rm /home/docker/programs/mafft-7.294-without-extensions-src.tgz && \
+	rm -rf /home/docker/programs/mafft-7.294-without-extensions
 
 # Install HMMER3
 RUN cd /home/docker/programs && \
@@ -77,16 +81,23 @@ RUN cd /home/docker/programs && \
 	make install && \
 	rm /home/docker/programs/hmmer-3.1b2.tar.gz && \
 	rm -rf /home/docker/programs/hmmer-3.1b2
-
+	
 # Install Pipelign
 RUN cd /home/docker/programs && \
 	git clone http://github.com/asmmhossain/pipelign.git && \
 	cd pipelign && \
 	chmod +x ./Pipelign.py && \
 	cp ./Pipelign.py /usr/local/bin && \
+	#chmod +x pipelignRscripts/freqsLong.R && \
+	#cp pipelignRscripts/freqsLong.R /usr/local/bin && \
+	#chmod +x pipelignRscripts/freqsLongFrags.R && \
+	#cp pipelignRscripts/freqsLongFrags.R /usr/local/bin && \
+	#chmod +x pipelignRscripts/lengthDistribution.R && \
+	#cp pipelignRscripts/lengthDistribution.R /usr/local/bin && \	
 	rm -rf /home/docker/programs/pipelign
+
 
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-VOLUME ["/home/docker"]
+#VOLUME ["/home/docker"]	
