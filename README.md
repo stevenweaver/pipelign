@@ -21,7 +21,7 @@ Docker repository for **Pipelign** is hosted on [asmmhossain/Pipelign](https://h
 
 The command for launching **Pipelign** in **docker** is:
 
-``docker run -i -t -v $(pwd):/data asmmhossain/pipelign /sbin/my_init -- bash -l``
+``docker run -i -t --rm -v $(pwd):/data asmmhossain/pipelign /sbin/my_init -- bash -l``
 
 Please make sure the sequence file resides in the current directory from where the command is executed. Output file will be stored in the current directory.
 
