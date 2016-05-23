@@ -1,6 +1,10 @@
 # Pipelign
 
-Pipeline for aligning virus sequences
+Semi-automated computational pipeline for aligning virus sequences
+
+``Pipelign`` can be downloaded from github using the following command:
+
+``git clone https://github.com/asmmhossain/pipelign``
 
 Typing ``python3 Pipelign.py -h`` will give a short usage information
 
@@ -15,14 +19,18 @@ Dependencies:
 
 ## Docker
 
-Docker repository for **Pipelign** is hosted on [asmmhossain/Pipelign](https://hub.docker.com/r/asmmhossain/pipelign/). Anyone having [Docker](https://www.docker.com/) installed can get **Pipelign** using the command:
+Docker repository for ``Pipelign`` is hosted on [asmmhossain/Pipelign](https://hub.docker.com/r/asmmhossain/pipelign/). Anyone having [Docker](https://www.docker.com/) installed can get ``Pipelign`` using the command:
 
 ``docker pull asmmhossain/pipelign``
 
-The command for launching **Pipelign** in **docker** is:
+The following command will show the usage information and command line argument options for running ``Pipelign`` using docker:
 
-``docker run -i -t --rm -v $(pwd):/data asmmhossain/pipelign /sbin/my_init -- bash -l``
+``docker run --rm asmmhossain/pipelign Pipelign.py -h``
 
-Please make sure the sequence file resides in the current directory from where the command is executed. Output file will be stored in the current directory.
+Then ``Pipelign`` can be run to produce alignments using desired options:
+
+``docker run -i -t --rm -v $(pwd):/data -w /data asmmhossain/pipelign Pipelign.py [options]``
+
+Please make sure the sequence file resides in the current directory from where the docker container is launched. Output file will be stored in the current directory.
 
 

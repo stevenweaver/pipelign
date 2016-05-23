@@ -22,23 +22,25 @@ RUN useradd docker \
 RUN apt-get update -qq && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
  	build-essential \
-	default-jdk \
-	perl \
+	#default-jdk \
+	#perl \
  	python3-dev \
 	git \
 	wget \
 	cmake
+	
+# Clean up APT when done.
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
 
 # Install the recent pip release
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
 	python3 get-pip.py && \
-	rm get-pip.py	
-
-# Install numpy
-RUN pip3 install numpy
-
-# Install Biopython
-RUN pip3 install biopython
+	rm get-pip.py	&& \
+	# Install numpy &7 \
+	pip3 install numpy && \
+	# Install Biopython && \
+	pip3 install biopython
 
 # Install CD-HIT
 RUN cd /home/docker/programs && \
@@ -100,4 +102,4 @@ RUN cd /home/docker/programs && \
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-#VOLUME ["/home/docker"]	
+#VOLUME ["data"]	
