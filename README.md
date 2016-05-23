@@ -1,6 +1,6 @@
 # Pipelign
 
-Semi-automated computational pipeline for aligning virus sequences
+Semi-automated computational pipeline for aligning virus sequences.
 
 ``Pipelign`` can be downloaded from github using the following command:
 

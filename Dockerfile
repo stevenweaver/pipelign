@@ -37,7 +37,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
 	python3 get-pip.py && \
 	rm get-pip.py	&& \
-	# Install numpy &7 \
+	# Install numpy && \
 	pip3 install numpy && \
 	# Install Biopython && \
 	pip3 install biopython
