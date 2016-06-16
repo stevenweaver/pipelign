@@ -11,7 +11,7 @@
 '''
 #*********************************************************************
 
-import sys, os, shutil, subprocess, argparse
+import sys, os, shutil, subprocess, argparse, textwrap
 from Bio import SeqIO
 import tempfile
 import time
@@ -265,6 +265,11 @@ def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
   seqs = list(SeqIO.parse(longName,'fasta'))
   
   if len(seqs) < 2:
+    try:
+      shutil.copy(longName,'grp')
+    except OSError as e:
+      print(e)
+      cZip(cDir,tName,zName)
     return
   
   print('\nRunning CD-HIT/CD-HIT-EST to group long sequences into clusters based on sequence similarity')
@@ -306,6 +311,10 @@ def makeClusters(longName):
   
   if len(seqs) < 2:
     shutil.copy(longName,'grp.0.fas')
+    clsSize.append(1)
+    fh = open('clusterList.txt','w')
+    fh.write('%s\t0' %seqs[0].id)
+    fh.close()
     return 1, clsSize
   
   cName = 'grp.clstr'
@@ -493,8 +502,10 @@ def alnFullSequenceClusters(nClusters,thread,mIterL,cDir,tName,zName):
     aName = 'grp.' + str(i) + '.aln'
     seqs = list(SeqIO.parse(cName,'fasta'))
     
+    print('\tAligning cluster %d of %d sequences' % (i,len(seqs)))
+    
     if len(seqs) > 1:
-      print('\tAligning cluster %d of %d sequences' % (i,len(seqs)))
+      #print('\tAligning cluster %d of %d sequences' % (i,len(seqs)))
       #ginsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
       #linsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
       fftnsi(cName,aName,thread,mIterL,log,cDir,tName,zName)
@@ -530,7 +541,9 @@ def makeHMMdb(nClusters,cDir,tName,zName,thread,lFile,alpha):
 
     if len(aseqs) == 1:
       aseqs.append(aseqs[0])
-      aseqs[1].id = 'temp'
+      aseqs[1].id = aseqs[0].id + '_1'
+      aseqs[1].name = aseqs[1].id
+      aseqs[1].description = aseqs[1].id
 
     if len(aseqs) > 1:
       sumGap = 0
@@ -539,8 +552,9 @@ def makeHMMdb(nClusters,cDir,tName,zName,thread,lFile,alpha):
       if sumGap == 0:
         for seq in aseqs:
           seq.seq = seq.seq + '-'
-        SeqIO.write(aseqs,'temp.aln','fasta')  
-        aName = 'temp.aln'
+        aName = 'grp.' + str(i) + '.tmp.aln'
+        SeqIO.write(aseqs,aName,'fasta')  
+        #aName = 'temp.aln'
     
     #**************
     if alpha == 'dna':
@@ -732,7 +746,7 @@ def mergeClusters(nClusters,outFile,keepOrphans,thread,mIterM,cDir,tName,zName,l
   '''  
   
   print('\nMerging all cluster alignments together')
-  
+  lh = open('merge.log','w')
   if nClusters == 1: 
     if not keepOrphans: 
       try:
@@ -743,7 +757,7 @@ def mergeClusters(nClusters,outFile,keepOrphans,thread,mIterM,cDir,tName,zName,l
         cZip(cDir,tName,zName)
     else:
       if os.path.exists('frag.noClusters.fas') and os.stat('frag.noClusters.fas').st_size > 0:
-        addFragments('frag.noClusters.fas','cls.0.aln',outFile,thread,log,cDir,tName,zName)
+        addFragments('frag.noClusters.fas','cls.0.aln',outFile,thread,'alignOrphan.log',cDir,tName,zName)
         return
       else:
         try:
@@ -790,7 +804,7 @@ def mergeClusters(nClusters,outFile,keepOrphans,thread,mIterM,cDir,tName,zName,l
   
   catText += '> merge'
 
-  lh = open('merge.log','w')
+  
     
   #*********
   if mFlag: # at least one alignment contains more than one sequences
@@ -843,7 +857,7 @@ def getArguments():
     Parses all the command line arguments from the user
   
   '''
-  parser = argparse.ArgumentParser(description="Pipelign: creates multiple sequence alignment from FASTA formatted sequence file", formatter_class=argparse.RawDescriptionHelpFormatter)  
+  parser = argparse.ArgumentParser(description="Pipelign: creates multiple sequence alignment from FASTA formatted sequence file", formatter_class=argparse.RawTextHelpFormatter) #formatter_class=argparse.RawDescriptionHelpFormatter)  
   parser.add_argument('-i', '--input', required=True, help="Input sequence file")
   parser.add_argument('-o', '--output', required=True, help="Output alignment file")
   parser.add_argument('-t', '--thr', type=lengthThreshold, help="Length threshold for full sequences", default=0.5)
@@ -857,8 +871,15 @@ def getArguments():
   parser.add_argument('-m', '--mIterateMerge', type=iterThreshold, help="Number of iterations to refine merged alignment", default=100)
   parser.add_argument('-d', '--tempDirPath', required=False, help="Path for temporary directory",default=None)
   parser.add_argument('-l', '--longSeqsOnly', help='Only align long sequences', action="store_true")
+  parser.add_argument('-n', '--stage', type=int,default=5, choices=[1,2,3,4],
+    help=textwrap.dedent('''\
+    1  Make clusters alignments of long sequences
+    2  Build HMMs of long cluster alignments
+    3  Add fragments to cluster alignments
+    4  Make final alignment
+  	'''))
 
-  
+  parser.add_argument('-x', '--excludeClusters', help='Exclude clusters from final alignment', action="store_true")  
   
   args = parser.parse_args()
 
@@ -889,8 +910,14 @@ if __name__=="__main__":
       longName = 'long.fas',
       fragName = 'frag.fas',
       tempDirPath = args.tempDirPath,
-      longSeqsOnly = args.longSeqsOnly)
+      longSeqsOnly = args.longSeqsOnly,
+      stage = args.stage,
+      excludeClusters = args.excludeClusters)
   
+  if mArgs.stage == 3 and mArgs.longSeqsOnly:
+    print('\nOptions -n (--stage) and -l (--longSeqsOnly) cannot be used in the same command')
+    print('Please use only one of them in a single run')
+    sys.exit()
   
   cDir = os.getcwd() # save current working directory
   tName1 = 'in.fas'
@@ -978,21 +1005,33 @@ if __name__=="__main__":
     drawMidPointRootTree('clsReps.aln.treefile')
     print('All %d cluster(s) will be added to the final alignment' % numClusters)
     
-    inChoice = input('Clusters you want to exclude: ')
-    clsL = inChoice.split()
-    for c in clsL:
-      if 0 <= int(c) <= numClusters:
-        clsExclude.append(int(c))
-        print('\tCluster %d will not be added to the final alignment' % int(c))
-      else:
-        print('\t%d is not a valid cluster number' % int(c))
+    if mArgs.excludeClusters:
+      inChoice = input('Clusters you want to exclude: ')
+      clsL = inChoice.split()
+      for c in clsL:
+        if 0 <= int(c) <= numClusters:
+          clsExclude.append(int(c))
+          print('\tCluster %d will not be added to the final alignment' % int(c))
+        else:
+          print('\t%d is not a valid cluster number' % int(c))
   
   else:
     print('\nNumber of cluster representative(s) is %d. Phylogenetic tree can not be built' % numClusters)
     
   #print('\n\nNumber of clusters %d' % numClusters)
   alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
-  
+
+  if mArgs.stage == 1: # stops after producing clusters of long sequences
+    print('\nAlignments of long sequence clusters created')
+    cZip(cDir,tName,zName)
+
+  if mArgs.stage == 2:
+    lFile = 'hmmer.log'
+    oFile = 'hmm.out'
+    makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
+    print('\nHMM files are created.')
+    cZip(cDir,tName,zName)
+      
   if not mArgs.longSeqsOnly: # add fragments to final alignment
     if not mArgs.fragEmpty:
       lFile = 'hmmer.log'
@@ -1000,11 +1039,11 @@ if __name__=="__main__":
       makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
       searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
     
-    #numClusters = 2
-    mArgs.keepOrphans = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepOrphans)
+      #numClusters = 2
+      mArgs.keepOrphans = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepOrphans)
   
-    # next is add fragments to cluster alignments  
-    addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
+      # next is add fragments to cluster alignments  
+      addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
     
     '''
     #cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
@@ -1022,6 +1061,21 @@ if __name__=="__main__":
     print('\t<stat.frequency.fragments.svg> created')
     lh.close()
     '''
+    if mArgs.fragEmpty: # no fragments present, writing cluster alignment files
+      for i in range(numClusters):
+        try:
+          aName = 'grp.' + str(i) + '.aln'
+          oName = 'cls.' + str(i) + '.aln'
+          
+          shutil.copy(aName,oName)
+        except OSError as e:
+          print(e)
+          cZip(cDir,tName,zName)
+    
+    if mArgs.stage == 3:
+      print('\nFragments are added to the cluster alignments')
+      cZip(cDir,tName,zName)
+  
   else: # only align long sequences
     print("\n**Pipelign is running with '-l' flag. So only long sequences will be added to the final alignment**")
     for i in range(numClusters):
