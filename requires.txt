@@ -1,0 +1,5 @@
+biopython==1.67
+joblib==0.10.0
+numpy==1.11.1
+py==1.4.31
+pytest==2.9.2
