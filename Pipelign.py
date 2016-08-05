@@ -77,20 +77,6 @@ def checkMPI():
 
 #****************************************
 
-def cZip(cDir,tName,zName):
-  '''
-  creates a zip file of the temporary directory
-  '''
-  os.chdir(cDir)
-
-  #zName = 'pipelign.' + time.strftime('%Y-%m-%d-%H%M%S')
-  try:
-    shutil.make_archive(zName,'zip',tName)
-  except:
-    sys.exit(e)
-
-  print('\nArchive for all temporary files created in %s.zip\n' % zName)
-  sys.exit()
 
 #******************************************
 
@@ -262,157 +248,7 @@ def separateFullFragment(iFile, thr, longName, fragName):
     return 1
   else:
     return 0
-#************************************************************************
 
-#************************************************************************
-
-def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
-  '''
-    CD-HIT is used to group similar sequences together in clusters for alignment
-
-  '''
-
-  seqs = list(SeqIO.parse(longName,'fasta'))
-
-  if len(seqs) < 2:
-    try:
-      shutil.copy(longName,'grp')
-    except OSError as e:
-      print(e)
-      cZip(cDir,tName,zName)
-    return
-
-  print('\nRunning CD-HIT/CD-HIT-EST to group long sequences into clusters based on sequence similarity')
-
-  lh = open('cdhit.log','w') # create log file for cdhit
-
-  if alphabet == 'dna' or alphabet == 'rna':
-    cl = 'cd-hit-est -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
-    #print(cl)
-
-  elif alphabet == 'aa':
-    cl = 'cd-hit -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
-    #print(cl)
-
-  try:
-    subprocess.check_call(cl, shell=True, stdout=lh, stderr=lh)
-  except subprocess.CalledProcessError as e:
-    print(e)
-    cZip(cDir,tName,zName)
-
-  lh.close() # close log file
-
-  print('\tCD-HIT created two files:')
-  print('\t\t  <grp> for cluster representative long sequences')
-  print('\t\t  <grp.clstr> for cluster assignment of long sequences')
-#*************************************************************************
-
-#*************************************************************************
-def makeClusters(longName):
-  '''
-    Separate files are created for each clusters
-  '''
-
-  print('\nCreating cluster files for long sequences')
-
-  seqs = list(SeqIO.parse(longName,'fasta')) # load all the full sequences
-
-  clsSize = list()
-
-  if len(seqs) < 2:
-    shutil.copy(longName,'grp.0.fas')
-    clsSize.append(1)
-    fh = open('clusterList.txt','w')
-    fh.write('%s\t0' %seqs[0].id)
-    fh.close()
-    return 1, clsSize
-
-  cName = 'grp.clstr'
-
-  lines = [line.strip('\n') for line in open(cName,'r')] # read cluster file
-
-  start = 0 # flag for the beginning of first cluster list
-
-  cSeq = [] # hold sequences of a cluster
-
-  cls = 0 # count clusters
-
-  st = '' # clusterList string
-
-  ids = [] # IDs for the full sequences
-
-  for seq in seqs:
-    ids.append(seq.id)
-
-  '''
-    read cluster file and make separate cluster files
-  '''
-
-  if 'Cluster' not in lines[0]:
-    msg = '\n\n"grp.clstr" does not contain any cluster'
-    msg += '\nPlease try running the program again\n'
-    sys.exit(msg)
-
-  for i in range(1, len(lines)):
-    if 'Cluster' in lines[i]: # start of a new cluster list
-      gName = 'grp.' + str(cls) + '.fas'
-      cls = cls + 1
-      SeqIO.write(cSeq,gName,'fasta')
-      cSeq = []
-      clsSize.append(len(cSeq))
-    else: # continue with the existing cluster
-      seqID = lines[i].split()[2].replace('>','').replace('...','')
-      st += seqID + '\t' + str(cls) + '\n' # updating clusterList file content
-      sInd = ids.index(seqID)
-      cSeq.append(seqs[sInd])
-
-  gName = 'grp.' + str(cls) + '.fas'
-  cls = cls + 1
-  SeqIO.write(cSeq,gName,'fasta')
-
-  fh = open('clusterList.txt','w')
-  fh.write(st)
-  fh.close()
-
-  print('\tTotal %d cluster file(s) created; example name <cls.0.fas>' % cls)
-
-  return cls, clsSize
-#***********************************************************************
-
-#***********************************************************************
-
-def addClusterNumberToReps(repName,lstFile,outFile,clsSize):
-  '''
-    - Reads in the cluster representative FASTA file and the clusterList.txt file
-    - Adds cluster number to the sequence header e.g. >seq1_0
-    - Temporary file <clsReps.fas> is written
-  '''
-
-  print('\nWriting cluster representatives with cluster number in the header')
-
-  cList = [line.strip() for line in open(lstFile,'r')]
-
-  cID = [] # sequence ids
-  cNum = [] # cluster numbers
-
-  for line in cList:
-    words = line.split()
-    cID.append(words[0])
-    cNum.append(words[1])
-
-  seqs = list(SeqIO.parse(repName,'fasta'))
-
-  for seq in seqs:
-    if seq.id in cID:
-      ind = cID.index(seq.id)
-
-      seq.id = seq.id + '_' + str(cNum.count(cNum[ind])) + '_' + cNum[ind]
-      seq.name = seq.id
-      seq.description = seq.id
-    else:
-      sys.exit('\nSequence %s does not have a cluster. Pipelign is exiting' % seq.id)
-
-  SeqIO.write(seqs,outFile,'fasta')
 
 #***********************************************************************
 
@@ -1008,16 +844,16 @@ if __name__=="__main__":
 
   mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
 
-  runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
+  #runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
 
-  numClusters, clsSize = makeClusters(mArgs.longName)
+  #numClusters, clsSize = makeClusters(mArgs.longName)
 
   if numClusters == 0:
     sys.exit('\nError: Something went wrong during clustering sequences. Please check the input file')
 
-  addClusterNumberToReps('grp','clusterList.txt','clsReps.fas',clsSize)
+  #addClusterNumberToReps('grp','clusterList.txt','clsReps.fas',clsSize)
   #'''
-  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
+  #makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
 
   clsExclude = list()
 
