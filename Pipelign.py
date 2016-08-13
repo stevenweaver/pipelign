@@ -18,6 +18,7 @@ import tempfile
 import time
 import joblib
 import math
+import ruffus
 
 #************************************
 class Struct:
@@ -266,7 +267,7 @@ def separateFullFragment(iFile, thr, longName, fragName):
 
 #************************************************************************
 
-def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
+def runCDHIT(longName,outfile,alphabet,per,thread,cDir,tName,zName):
   '''
     CD-HIT is used to group similar sequences together in clusters for alignment
 
@@ -276,7 +277,7 @@ def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
 
   if len(seqs) < 2:
     try:
-      shutil.copy(longName,'grp')
+      shutil.copy(longName,outfile)
     except OSError as e:
       print(e)
       cZip(cDir,tName,zName)
@@ -287,11 +288,11 @@ def runCDHIT(longName,alphabet,per,thread,cDir,tName,zName):
   lh = open('cdhit.log','w') # create log file for cdhit
 
   if alphabet == 'dna' or alphabet == 'rna':
-    cl = 'cd-hit-est -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
+    cl = 'cd-hit-est -c %f -n 5 -i %s -o %s -d 0 -T %d' % (per,longName,outfile,thread)
     #print(cl)
 
   elif alphabet == 'aa':
-    cl = 'cd-hit -c %f -n 5 -i %s -o grp -d 0 -T %d' % (per,longName,thread)
+    cl = 'cd-hit -c %f -n 5 -i %s -o %s -d 0 -T %d' % (per,longName,outfile,thread)
     #print(cl)
 
   try:
@@ -1007,131 +1008,165 @@ if __name__=="__main__":
   '''
 
   mArgs.fragEmpty = separateFullFragment(tName2, mArgs.lenThr, mArgs.longName, mArgs.fragName)
+  globals_ = {"numClusters" : None, "clsSize" : None }
 
-  runCDHIT(mArgs.longName, mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
+  @ruffus.files(mArgs.longName, "grp", mArgs.alphabet, mArgs.simPer, mArgs.thread,cDir,tName,zName)
+  def task_runCDHIT(input, output, alphabet, simPer, thread, cDir,tName,zName):
+    runCDHIT(input, output, alphabet, simPer, thread, cDir,tName,zName)
 
-  numClusters, clsSize = makeClusters(mArgs.longName)
+  def clusterRepParams():
+    numClusters, clsSize = makeClusters(mArgs.longName)
+    if numClusters == 0:
+      sys.exit('Error: Something went wrong during clustering sequences. Please check the input file')
+    yield ('grp',['clusterList.txt','clsReps.fas'], clsSize)
 
-  if numClusters == 0:
-    sys.exit('\nError: Something went wrong during clustering sequences. Please check the input file')
+  @ruffus.files(clusterRepParams)
+  @ruffus.follows(task_runCDHIT)
+  def task_makeClusterReps(input, output, clsSize):
+    addClusterNumberToReps(input, output[0], output[1], clsSize)
 
-  addClusterNumberToReps('grp','clusterList.txt','clsReps.fas',clsSize)
-  #'''
-  makeClusterRepsAlignment('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
+  @ruffus.files('clsReps.fas','clsReps.aln',mArgs.thread,mArgs.mIterL,cDir,tName,zName)
+  @ruffus.follows(task_makeClusterReps)
+  def task_makeClusterRepsAlignments(input, output, thread, mIterL, cDir, tName, zName):
+    makeClusterRepsAlignment(input, output, thread, mIterL, cDir, tName, zName)
 
-  clsExclude = list()
+  def makeIQTreeParams():
+    numClusters, clsSize = makeClusters(mArgs.longName)
+    yield ('clsReps.aln','clsReps.aln.treefile', mArgs.thread,cDir,tName,zName, numClusters)
 
-  if numClusters > 2:
-    makeIQTree('clsReps.aln',mArgs.thread,cDir,tName,zName)
-    #drawTree('clsReps.aln.treefile')
-    drawMidPointRootTree('clsReps.aln.treefile')
-    print('All %d cluster(s) will be added to the final alignment' % numClusters)
+  @ruffus.files(makeIQTreeParams)
+  @ruffus.follows(task_makeClusterRepsAlignments)
+  def task_makeIQTree(input,output,thread,cDir,tName,zName,numClusters):
+    if numClusters > 2:
+      makeIQTree(input,thread,cDir,tName,zName)
 
-    if mArgs.excludeClusters:
-      inChoice = input('Clusters you want to exclude: ')
-      clsL = inChoice.split()
-      for c in clsL:
-        if 0 <= int(c) <= numClusters:
-          clsExclude.append(int(c))
-          print('\tCluster %d will not be added to the final alignment' % int(c))
-        else:
-          print('\t%d is not a valid cluster number' % int(c))
-
-  else:
-    print('\nNumber of cluster representative(s) is %d. Phylogenetic tree can not be built' % numClusters)
+  def alnFullSequenceClustersParams():
+    numClusters, clsSize = makeClusters(mArgs.longName)
+    yield ('grp.0.fas', 'grp.0.aln', numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
 
   #print('\n\nNumber of clusters %d' % numClusters)
-  alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
+  @ruffus.files(alnFullSequenceClustersParams)
+  @ruffus.follows(task_makeClusterRepsAlignments)
+  def task_alnFullSequenceClusters(input,output,numClusters,thread,mIterL,cDir,tName,zName):
+    alnFullSequenceClusters(numClusters,thread,mIterL,cDir,tName,zName)
 
-  if mArgs.stage == 1: # stops after producing clusters of long sequences
-    print('\nAlignments of long sequence clusters created')
-    cZip(cDir,tName,zName)
 
-  if mArgs.stage == 2:
-    lFile = 'hmmer.log'
-    oFile = 'hmm.out'
-    makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
-    print('\nHMM files are created.')
-    cZip(cDir,tName,zName)
+  ruffus.pipeline_run([task_makeIQTree, task_alnFullSequenceClusters], multiprocess = 2)
 
-  if not mArgs.longSeqsOnly: # add fragments to final alignment
-    if not mArgs.fragEmpty:
-      lFile = 'hmmer.log'
-      oFile = 'hmm.out'
-      makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
-      searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
 
-      #numClusters = 2
-      mArgs.keepOrphans = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepOrphans)
+  #if numClusters > 2:
+  #  makeIQTree('clsReps.aln',mArgs.thread,cDir,tName,zName)
+  #  #drawTree('clsReps.aln.treefile')
+  #  drawMidPointRootTree('clsReps.aln.treefile')
+  #  print('All %d cluster(s) will be added to the final alignment' % numClusters)
 
-      # next is add fragments to cluster alignments
-      addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
+  #  if mArgs.excludeClusters:
+  #    inChoice = input('Clusters you want to exclude: ')
+  #    clsL = inChoice.split()
+  #    for c in clsL:
+  #      if 0 <= int(c) <= numClusters:
+  #        clsExclude.append(int(c))
+  #        print('\tCluster %d will not be added to the final alignment' % int(c))
+  #      else:
+  #        print('\t%d is not a valid cluster number' % int(c))
 
-    '''
-    #cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
-    cl = 'freqsLongFrags.R clsReps.aln.treefile clusterList.txt '
-    cl += 'hmm.out ../stat.frequency.long.svg ../stat.frequency.fragments.svg'
+  #else:
+  #  print('\nNumber of cluster representative(s) is %d. Phylogenetic tree can not be built' % numClusters)
 
-    lh = open('stat.frequency.log','w')
-    try:
-      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
-    except subprocess.CalledProcessError as e:
-      #sys.exit(e)
-      print(e)
-      cZip(cDir,tName,zName)
-    print('\t<stat.frequency.long.svg> created')
-    print('\t<stat.frequency.fragments.svg> created')
-    lh.close()
-    '''
-    if mArgs.fragEmpty: # no fragments present, writing cluster alignment files
-      for i in range(numClusters):
-        try:
-          aName = 'grp.' + str(i) + '.aln'
-          oName = 'cls.' + str(i) + '.aln'
+#  clsExclude = list()
 
-          shutil.copy(aName,oName)
-        except OSError as e:
-          print(e)
-          cZip(cDir,tName,zName)
+#  #print('\n\nNumber of clusters %d' % numClusters)
+#  alnFullSequenceClusters(numClusters, mArgs.thread,mArgs.mIterL,cDir,tName,zName)
 
-    if mArgs.stage == 3:
-      print('\nFragments are added to the cluster alignments')
-      cZip(cDir,tName,zName)
+#  if mArgs.stage == 1: # stops after producing clusters of long sequences
+#    print('\nAlignments of long sequence clusters created')
+#    cZip(cDir,tName,zName)
 
-  else: # only align long sequences
-    print("\n**Pipelign is running with '-l' flag. So only long sequences will be added to the final alignment**")
-    for i in range(numClusters):
-      try:
-        aName = 'grp.' + str(i) + '.aln'
-        oName = 'cls.' + str(i) + '.aln'
+#  if mArgs.stage == 2:
+#    lFile = 'hmmer.log'
+#    oFile = 'hmm.out'
+#    makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
+#    print('\nHMM files are created.')
+#    cZip(cDir,tName,zName)
 
-        shutil.copy(aName,oName)
-      except OSError as e:
-        print(e)
-        cZip(cDir,tName,zName)
+#  if not mArgs.longSeqsOnly: # add fragments to final alignment
+#    if not mArgs.fragEmpty:
+#      lFile = 'hmmer.log'
+#      oFile = 'hmm.out'
+#      makeHMMdb(numClusters,cDir,tName,zName,mArgs.thread,lFile,mArgs.alphabet)
+#      searchHMMdb(lFile,mArgs.thread,mArgs.fragEmpty,mArgs.alphabet,oFile,cDir,tName,zName)
 
-    '''
-    #cl = 'Rscript %s/pipelignRscripts/freqsLong.R clsReps.aln.treefile clusterList.txt ' % cDir
-    cl = 'freqsLong.R clsReps.aln.treefile clusterList.txt '
-    cl += '../stat.frequency.long.svg'
+#      #numClusters = 2
+#      mArgs.keepOrphans = parseHMMsearchResult(numClusters,mArgs.fragName,oFile,mArgs.keepOrphans)
 
-    lh = open('stat.frequency.log','w')
-    try:
-      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
-    except subprocess.CalledProcessError as e:
-      #sys.exit(e)
-      print(e)
-      cZip(cDir,tName,zName)
-    print('\t<stat.frequency.long.svg> created')
-    lh.close()
-    '''
+#      # next is add fragments to cluster alignments
+#      addFragmentsToClusters(numClusters,mArgs.thread,cDir,tName,zName)
 
-  mergeClusters(numClusters,mArgs.outFile,mArgs.keepOrphans,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
+#    '''
+#    #cl = 'Rscript %s/pipelignRscripts/freqsLongFrags.R clsReps.aln.treefile clusterList.txt ' % cDir
+#    cl = 'freqsLongFrags.R clsReps.aln.treefile clusterList.txt '
+#    cl += 'hmm.out ../stat.frequency.long.svg ../stat.frequency.fragments.svg'
 
-  print('\nThe alignment is written in <%s>\n' % mArgs.outFile)
+#    lh = open('stat.frequency.log','w')
+#    try:
+#      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+#    except subprocess.CalledProcessError as e:
+#      #sys.exit(e)
+#      print(e)
+#      cZip(cDir,tName,zName)
+#    print('\t<stat.frequency.long.svg> created')
+#    print('\t<stat.frequency.fragments.svg> created')
+#    lh.close()
+#    '''
+#    if mArgs.fragEmpty: # no fragments present, writing cluster alignment files
+#      for i in range(numClusters):
+#        try:
+#          aName = 'grp.' + str(i) + '.aln'
+#          oName = 'cls.' + str(i) + '.aln'
 
-  if mArgs.makeZip:
-    cZip(cDir,tName,zName)
-  #'''
-#************************************************************
+#          shutil.copy(aName,oName)
+#        except OSError as e:
+#          print(e)
+#          cZip(cDir,tName,zName)
+
+#    if mArgs.stage == 3:
+#      print('\nFragments are added to the cluster alignments')
+#      cZip(cDir,tName,zName)
+
+#  else: # only align long sequences
+#    print("\n**Pipelign is running with '-l' flag. So only long sequences will be added to the final alignment**")
+#    for i in range(numClusters):
+#      try:
+#        aName = 'grp.' + str(i) + '.aln'
+#        oName = 'cls.' + str(i) + '.aln'
+
+#        shutil.copy(aName,oName)
+#      except OSError as e:
+#        print(e)
+#        cZip(cDir,tName,zName)
+
+#    '''
+#    #cl = 'Rscript %s/pipelignRscripts/freqsLong.R clsReps.aln.treefile clusterList.txt ' % cDir
+#    cl = 'freqsLong.R clsReps.aln.treefile clusterList.txt '
+#    cl += '../stat.frequency.long.svg'
+
+#    lh = open('stat.frequency.log','w')
+#    try:
+#      subprocess.check_call(cl,shell=True,stdout=lh,stderr=lh)
+#    except subprocess.CalledProcessError as e:
+#      #sys.exit(e)
+#      print(e)
+#      cZip(cDir,tName,zName)
+#    print('\t<stat.frequency.long.svg> created')
+#    lh.close()
+#    '''
+
+#  mergeClusters(numClusters,mArgs.outFile,mArgs.keepOrphans,mArgs.thread,mArgs.mIterM,cDir,tName,zName,clsExclude)
+
+#  print('\nThe alignment is written in <%s>\n' % mArgs.outFile)
+
+#  if mArgs.makeZip:
+#    cZip(cDir,tName,zName)
+#  #'''
+##************************************************************
 
